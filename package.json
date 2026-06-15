@@ -1,0 +1,31 @@
+{
+  "name": "tank-battle-3d",
+  "version": "1.0.0",
+  "description": "Q版 3D 坦克大战 — mobile chibi tank battle game (Three.js + Capacitor)",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc --noEmit && vite build",
+    "preview": "vite preview --host",
+    "typecheck": "tsc --noEmit",
+    "cap:sync": "cap sync android",
+    "android:build": "npm run build && cap sync android"
+  },
+  "keywords": [
+    "game",
+    "threejs",
+    "tank",
+    "mobile",
+    "capacitor"
+  ],
+  "author": "rocketeee",
+  "license": "MIT",
+  "devDependencies": {
+    "@types/three": "^0.160.0",
+    "typescript": "^5.5.4",
+    "vite": "^5.4.2"
+  },
+  "dependencies": {
+    "three": "^0.160.1"
+  }
+}
