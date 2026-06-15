@@ -194,10 +194,10 @@ export class Player {
       0,
       this.pos.z - back.z * 1.5,
     );
-    const camTarget = new THREE.Vector3(target.x, 13, target.z + 11);
+    const camTarget = new THREE.Vector3(target.x, 13.5, target.z + 11.5);
     camera.position.x = damp(camera.position.x, camTarget.x, 6, dt);
     camera.position.y = damp(camera.position.y, camTarget.y, 6, dt);
     camera.position.z = damp(camera.position.z, camTarget.z, 6, dt);
-    camera.lookAt(this.pos.x, 1.2, this.pos.z);
+    camera.lookAt(this.pos.x, 1.8, this.pos.z - 3);
   }
 }

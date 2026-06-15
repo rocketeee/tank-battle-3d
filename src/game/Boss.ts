@@ -60,8 +60,8 @@ export class Boss {
     toPlayer.normalize();
 
     // keep mid distance, slowly strafe
-    if (dist > 16) p.addScaledVector(toPlayer, this.speed * dt);
-    else if (dist < 11) p.addScaledVector(toPlayer, -this.speed * dt);
+    if (dist > 13) p.addScaledVector(toPlayer, this.speed * dt);
+    else if (dist < 9) p.addScaledVector(toPlayer, -this.speed * dt);
     const tangent = new THREE.Vector3(-toPlayer.z, 0, toPlayer.x);
     p.addScaledVector(tangent, Math.sin(time * 0.5) * this.speed * 0.6 * dt);
     if (this.level === 2) p.y = this.altitude + Math.sin(time * 1.2) * 0.6;
@@ -144,6 +144,7 @@ export class Boss {
     scene.remove(this.group);
     this.group.traverse((o) => {
       const m = o as THREE.Mesh;
+      if (m.userData.isOutline) return;
       if (m.geometry) m.geometry.dispose();
       const mat = m.material;
       if (Array.isArray(mat)) mat.forEach((x) => x.dispose());

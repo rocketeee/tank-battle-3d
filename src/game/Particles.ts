@@ -21,62 +21,107 @@ export class Particles {
     this.effects.push({ obj, life, maxLife: life, update });
   }
 
-  /** Expanding fireball + sparks. */
+  /** Big layered fiery explosion: flash + fireball + smoke puffs + sparks + scorch. */
   explosion(pos: THREE.Vector3, color = 0xff8a3b, scale = 1) {
-    const core = new THREE.Mesh(
-      new THREE.SphereGeometry(0.4 * scale, 12, 12),
-      new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 1, depthWrite: false }),
+    // instant white-hot flash
+    const flash = new THREE.Mesh(
+      new THREE.SphereGeometry(0.6 * scale, 12, 12),
+      new THREE.MeshBasicMaterial({ color: 0xfff3c4, transparent: true, opacity: 1, depthWrite: false, blending: THREE.AdditiveBlending }),
     );
-    core.position.copy(pos);
-    this.add(core, 0.45, (e, dt) => {
+    flash.position.copy(pos);
+    this.add(flash, 0.16, (e, dt) => {
       const t = 1 - e.life / e.maxLife;
-      e.obj.scale.setScalar(1 + t * 2.6 * scale);
+      e.obj.scale.setScalar(1 + t * 2.2 * scale);
       ((e.obj as THREE.Mesh).material as THREE.MeshBasicMaterial).opacity = 1 - t;
       e.life -= dt;
     });
 
-    const smoke = new THREE.Mesh(
-      new THREE.SphereGeometry(0.5 * scale, 10, 10),
-      new THREE.MeshBasicMaterial({ color: 0x555555, transparent: true, opacity: 0.5, depthWrite: false }),
-    );
-    smoke.position.copy(pos);
-    this.add(smoke, 0.7, (e, dt) => {
-      const t = 1 - e.life / e.maxLife;
-      e.obj.scale.setScalar(1 + t * 3 * scale);
-      e.obj.position.y += dt * 0.6;
-      ((e.obj as THREE.Mesh).material as THREE.MeshBasicMaterial).opacity = 0.5 * (1 - t);
-      e.life -= dt;
-    });
+    // layered fireball (outer red, inner orange, hot yellow center)
+    const layers = [
+      { c: 0xff3b1f, r: 0.55, grow: 3.0, life: 0.5 },
+      { c: color, r: 0.42, grow: 2.6, life: 0.45 },
+      { c: 0xffd54a, r: 0.28, grow: 2.0, life: 0.38 },
+    ];
+    for (const L of layers) {
+      const ball = new THREE.Mesh(
+        new THREE.SphereGeometry(L.r * scale, 14, 14),
+        new THREE.MeshBasicMaterial({ color: L.c, transparent: true, opacity: 1, depthWrite: false, blending: THREE.AdditiveBlending }),
+      );
+      ball.position.copy(pos);
+      this.add(ball, L.life, (e, dt) => {
+        const t = 1 - e.life / e.maxLife;
+        e.obj.scale.setScalar(1 + t * L.grow * scale);
+        e.obj.position.y += dt * 0.5;
+        ((e.obj as THREE.Mesh).material as THREE.MeshBasicMaterial).opacity = 1 - t;
+        e.life -= dt;
+      });
+    }
 
-    const n = Math.round(8 * scale);
+    // drifting smoke puffs
+    const puffs = Math.round(3 * scale);
+    for (let i = 0; i < puffs; i++) {
+      const smoke = new THREE.Mesh(
+        new THREE.SphereGeometry((0.4 + Math.random() * 0.3) * scale, 8, 8),
+        new THREE.MeshBasicMaterial({ color: 0x4a4a4a, transparent: true, opacity: 0.55, depthWrite: false }),
+      );
+      smoke.position.copy(pos);
+      const drift = new THREE.Vector3((Math.random() - 0.5) * 1.4, 0.8 + Math.random(), (Math.random() - 0.5) * 1.4);
+      this.add(smoke, 0.8 + Math.random() * 0.4, (e, dt) => {
+        const t = 1 - e.life / e.maxLife;
+        e.obj.scale.setScalar(1 + t * 2.4 * scale);
+        e.obj.position.addScaledVector(drift, dt);
+        ((e.obj as THREE.Mesh).material as THREE.MeshBasicMaterial).opacity = 0.55 * (1 - t);
+        e.life -= dt;
+      });
+    }
+
+    // flying sparks/embers
+    const n = Math.round(12 * scale);
     for (let i = 0; i < n; i++) {
       const spark = new THREE.Mesh(
         new THREE.SphereGeometry(0.07 * scale, 6, 6),
-        new THREE.MeshBasicMaterial({ color: 0xffd54a, transparent: true, depthWrite: false }),
+        new THREE.MeshBasicMaterial({ color: i % 2 ? 0xffd54a : 0xff7b2a, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending }),
       );
       spark.position.copy(pos);
-      const vel = new THREE.Vector3((Math.random() - 0.5) * 6, Math.random() * 5 + 1, (Math.random() - 0.5) * 6).multiplyScalar(scale);
-      this.add(spark, 0.5 + Math.random() * 0.3, (e, dt) => {
+      const vel = new THREE.Vector3((Math.random() - 0.5) * 7, Math.random() * 6 + 1.5, (Math.random() - 0.5) * 7).multiplyScalar(scale);
+      this.add(spark, 0.5 + Math.random() * 0.4, (e, dt) => {
         vel.y -= 12 * dt;
         e.obj.position.addScaledVector(vel, dt);
         ((e.obj as THREE.Mesh).material as THREE.MeshBasicMaterial).opacity = e.life / e.maxLife;
         e.life -= dt;
       });
     }
+
+    // ground scorch shockwave
+    this.ring(pos.clone(), 0xffa83b, 2.0 * scale);
   }
 
-  /** Small muzzle flash at the barrel tip. */
+  /** Punchy muzzle flash: star-burst cone + glow + smoke puff at the barrel tip. */
   muzzle(pos: THREE.Vector3, color = 0xffd54a) {
-    const flash = new THREE.Mesh(
-      new THREE.SphereGeometry(0.22, 8, 8),
-      new THREE.MeshBasicMaterial({ color, transparent: true, depthWrite: false }),
+    const glow = new THREE.Mesh(
+      new THREE.SphereGeometry(0.26, 10, 10),
+      new THREE.MeshBasicMaterial({ color: 0xfff0b0, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending }),
     );
-    flash.position.copy(pos);
-    this.add(flash, 0.12, (e, dt) => {
-      e.obj.scale.setScalar(1 + (1 - e.life / e.maxLife) * 1.5);
+    glow.position.copy(pos);
+    this.add(glow, 0.13, (e, dt) => {
+      e.obj.scale.setScalar(1 + (1 - e.life / e.maxLife) * 1.8);
       ((e.obj as THREE.Mesh).material as THREE.MeshBasicMaterial).opacity = e.life / e.maxLife;
       e.life -= dt;
     });
+    // a few quick spark streaks
+    for (let i = 0; i < 4; i++) {
+      const s = new THREE.Mesh(
+        new THREE.SphereGeometry(0.06, 6, 6),
+        new THREE.MeshBasicMaterial({ color, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending }),
+      );
+      s.position.copy(pos);
+      const vel = new THREE.Vector3((Math.random() - 0.5) * 3, (Math.random() - 0.2) * 2, (Math.random() - 0.5) * 3);
+      this.add(s, 0.18, (e, dt) => {
+        e.obj.position.addScaledVector(vel, dt);
+        ((e.obj as THREE.Mesh).material as THREE.MeshBasicMaterial).opacity = e.life / e.maxLife;
+        e.life -= dt;
+      });
+    }
   }
 
   /** Impact sparks; crit = bigger golden burst with text-like flare. */

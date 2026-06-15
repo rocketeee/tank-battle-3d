@@ -125,30 +125,46 @@ export function buildEnvironment(scene: THREE.Scene, cfg: LevelConfig): Environm
 
   // sky + fog
   scene.background = skyTexture(cfg.skyTop, cfg.skyBottom);
-  scene.fog = new THREE.Fog(cfg.fog, 35, 80);
+  scene.fog = new THREE.Fog(cfg.fog, 38, 88);
 
-  // ground
-  const groundMat = new THREE.MeshStandardMaterial({ color: cfg.ground, roughness: 1 });
-  const ground = new THREE.Mesh(new THREE.CircleGeometry(ARENA_RADIUS + 18, 48), groundMat);
-  ground.rotation.x = -Math.PI / 2;
-  ground.receiveShadow = true;
-  group.add(ground);
+  // outer ground (darker apron) + raised arena disc (brighter)
+  const apron = new THREE.Mesh(
+    new THREE.CircleGeometry(ARENA_RADIUS + 24, 56),
+    new THREE.MeshStandardMaterial({ color: cfg.ground2, roughness: 1 }),
+  );
+  apron.rotation.x = -Math.PI / 2;
+  apron.receiveShadow = true;
+  group.add(apron);
 
-  // arena ring decal
+  const arena = new THREE.Mesh(
+    new THREE.CircleGeometry(ARENA_RADIUS, 64),
+    new THREE.MeshStandardMaterial({ color: cfg.ground, roughness: 1 }),
+  );
+  arena.rotation.x = -Math.PI / 2;
+  arena.position.y = 0.02;
+  arena.receiveShadow = true;
+  group.add(arena);
+
+  // ringed "dirt/track" path inside the arena
+  const path = new THREE.Mesh(
+    new THREE.RingGeometry(ARENA_RADIUS * 0.62, ARENA_RADIUS * 0.74, 64),
+    new THREE.MeshStandardMaterial({ color: cfg.ground2, roughness: 1, side: THREE.DoubleSide, transparent: true, opacity: 0.75 }),
+  );
+  path.rotation.x = -Math.PI / 2;
+  path.position.y = 0.03;
+  group.add(path);
+
+  // bright rim border of the arena
   const ring = new THREE.Mesh(
-    new THREE.RingGeometry(ARENA_RADIUS - 0.6, ARENA_RADIUS, 64),
-    new THREE.MeshStandardMaterial({ color: cfg.ground2, roughness: 1, side: THREE.DoubleSide }),
+    new THREE.RingGeometry(ARENA_RADIUS - 0.7, ARENA_RADIUS, 72),
+    new THREE.MeshStandardMaterial({ color: cfg.ground2, roughness: 0.9, side: THREE.DoubleSide }),
   );
   ring.rotation.x = -Math.PI / 2;
-  ring.position.y = 0.02;
+  ring.position.y = 0.04;
   group.add(ring);
-  const innerRing = new THREE.Mesh(
-    new THREE.RingGeometry(ARENA_RADIUS * 0.55, ARENA_RADIUS * 0.55 + 0.4, 64),
-    new THREE.MeshStandardMaterial({ color: cfg.ground2, roughness: 1, side: THREE.DoubleSide, transparent: true, opacity: 0.6 }),
-  );
-  innerRing.rotation.x = -Math.PI / 2;
-  innerRing.position.y = 0.02;
-  group.add(innerRing);
+
+  // ground detail: flowers (forest) / pebbles, scattered inside the arena
+  scatterGroundDetail(group, cfg);
 
   // scattered props (mostly outside play bounds, some inside as cover)
   for (let i = 0; i < cfg.propCount; i++) {
@@ -163,21 +179,30 @@ export function buildEnvironment(scene: THREE.Scene, cfg: LevelConfig): Environm
     group.add(prop);
   }
 
-  // lights
-  const ambient = new THREE.AmbientLight(cfg.ambient, cfg.ambientIntensity);
+  // distant decorative skyline (clouds / floating rocks)
+  scatterSkyline(group, cfg);
+
+  // lights: ambient + hemisphere fill + key sun
+  const ambient = new THREE.AmbientLight(cfg.ambient, cfg.ambientIntensity * 0.6);
+  const hemi = new THREE.HemisphereLight(cfg.skyTop, cfg.ground, 0.55);
+  hemi.position.set(0, 40, 0);
   const sun = new THREE.DirectionalLight(cfg.sun, cfg.sunIntensity);
   sun.position.set(18, 30, 16);
   sun.castShadow = true;
-  sun.shadow.mapSize.set(1024, 1024);
+  sun.shadow.mapSize.set(2048, 2048);
   sun.shadow.camera.near = 1;
   sun.shadow.camera.far = 90;
+  sun.shadow.radius = 4;
   const d = 40;
   sun.shadow.camera.left = -d;
   sun.shadow.camera.right = d;
   sun.shadow.camera.top = d;
   sun.shadow.camera.bottom = -d;
-  sun.shadow.bias = -0.0005;
-  group.add(ambient, sun, sun.target);
+  sun.shadow.bias = -0.0004;
+  // soft warm rim/back light
+  const rimLight = new THREE.DirectionalLight(cfg.ambient, 0.35);
+  rimLight.position.set(-16, 14, -20);
+  group.add(ambient, hemi, sun, sun.target, rimLight);
 
   scene.add(group);
 
@@ -189,6 +214,7 @@ export function buildEnvironment(scene: THREE.Scene, cfg: LevelConfig): Environm
       scene.remove(group);
       group.traverse((o) => {
         const m = o as THREE.Mesh;
+        if (m.userData.isOutline) return;
         if (m.geometry) m.geometry.dispose();
         const mat = m.material;
         if (Array.isArray(mat)) mat.forEach((x) => x.dispose());
@@ -197,4 +223,95 @@ export function buildEnvironment(scene: THREE.Scene, cfg: LevelConfig): Environm
       if (scene.background instanceof THREE.Texture) scene.background.dispose();
     },
   };
+}
+
+const FLOWER_COLORS = [0xff6f91, 0xffd54a, 0xffffff, 0xff9bb0, 0xb06bff];
+
+/** Scatter small flowers (forest) or pebbles (desert/alien) across the arena floor. */
+function scatterGroundDetail(group: THREE.Group, cfg: LevelConfig): void {
+  if (cfg.theme === 'forest') {
+    const stemMat = new THREE.MeshStandardMaterial({ color: 0x3f9a45, roughness: 0.9 });
+    for (let i = 0; i < 70; i++) {
+      const a = rand(0, Math.PI * 2);
+      const r = rand(3, ARENA_RADIUS - 1.5);
+      const x = Math.cos(a) * r;
+      const z = Math.sin(a) * r;
+      const f = new THREE.Group();
+      const stem = new THREE.Mesh(new THREE.CylinderGeometry(0.02, 0.03, 0.3, 5), stemMat);
+      stem.position.y = 0.15;
+      const petalCol = FLOWER_COLORS[Math.floor(Math.random() * FLOWER_COLORS.length)];
+      const head = new THREE.Mesh(
+        new THREE.SphereGeometry(0.1, 8, 6),
+        new THREE.MeshStandardMaterial({ color: petalCol, emissive: petalCol, emissiveIntensity: 0.25, roughness: 0.6 }),
+      );
+      head.position.y = 0.32;
+      head.scale.y = 0.7;
+      f.add(stem, head);
+      f.position.set(x, 0.04, z);
+      f.scale.setScalar(rand(0.7, 1.3));
+      group.add(f);
+    }
+  } else {
+    const pebbleCol = cfg.theme === 'desert' ? 0xb89a5e : 0x5a4880;
+    for (let i = 0; i < 45; i++) {
+      const a = rand(0, Math.PI * 2);
+      const r = rand(3, ARENA_RADIUS - 1.5);
+      const peb = new THREE.Mesh(
+        new THREE.DodecahedronGeometry(rand(0.12, 0.28), 0),
+        new THREE.MeshStandardMaterial({ color: pebbleCol, roughness: 1 }),
+      );
+      peb.position.set(Math.cos(a) * r, 0.06, Math.sin(a) * r);
+      peb.rotation.set(rand(0, 3), rand(0, 3), rand(0, 3));
+      peb.castShadow = true;
+      group.add(peb);
+    }
+  }
+}
+
+/** Distant decorative elements high in the sky for depth (clouds / planets). */
+function scatterSkyline(group: THREE.Group, cfg: LevelConfig): void {
+  if (cfg.theme === 'alien') {
+    // floating rocks + a big planet
+    const planet = new THREE.Mesh(
+      new THREE.SphereGeometry(7, 24, 16),
+      new THREE.MeshStandardMaterial({ color: 0x8a5bd0, emissive: 0x3a1f6a, emissiveIntensity: 0.4, roughness: 0.8 }),
+    );
+    planet.position.set(-34, 30, -46);
+    group.add(planet);
+    const ringG = new THREE.Mesh(
+      new THREE.TorusGeometry(10, 0.6, 8, 40),
+      new THREE.MeshStandardMaterial({ color: 0xc6a6ff, emissive: 0x6a4da0, emissiveIntensity: 0.4, roughness: 0.7 }),
+    );
+    ringG.position.copy(planet.position);
+    ringG.rotation.set(1.1, 0.3, 0);
+    group.add(ringG);
+    for (let i = 0; i < 8; i++) {
+      const a = rand(0, Math.PI * 2);
+      const rock = new THREE.Mesh(
+        new THREE.DodecahedronGeometry(rand(0.8, 2), 0),
+        new THREE.MeshStandardMaterial({ color: 0x4a3a6a, roughness: 0.9 }),
+      );
+      rock.position.set(Math.cos(a) * rand(30, 46), rand(8, 22), Math.sin(a) * rand(30, 46));
+      group.add(rock);
+    }
+  } else {
+    // puffy stylized clouds
+    const cloudMat = new THREE.MeshStandardMaterial({ color: 0xffffff, emissive: 0xf0f4ff, emissiveIntensity: 0.15, roughness: 1 });
+    const cloudCount = 7;
+    for (let i = 0; i < cloudCount; i++) {
+      const a = (i / cloudCount) * Math.PI * 2 + rand(-0.3, 0.3);
+      const r = rand(40, 52);
+      const cloud = new THREE.Group();
+      const lobes = 3 + Math.floor(Math.random() * 3);
+      for (let j = 0; j < lobes; j++) {
+        const s = rand(1.6, 3);
+        const lobe = new THREE.Mesh(new THREE.SphereGeometry(s, 12, 8), cloudMat);
+        lobe.position.set((j - lobes / 2) * 2.2, rand(-0.4, 0.4), rand(-0.6, 0.6));
+        lobe.scale.y = 0.7;
+        cloud.add(lobe);
+      }
+      cloud.position.set(Math.cos(a) * r, rand(16, 26), Math.sin(a) * r);
+      group.add(cloud);
+    }
+  }
 }

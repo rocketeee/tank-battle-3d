@@ -41,7 +41,7 @@ export class Enemy {
       this.group = makeGrayAlien(variant);
       this.hpMax = Math.round(40 * hpScale);
       this.radius = 0.7;
-      this.headY = 1.08;
+      this.headY = 1.18;
       this.speed = rand(2.6, 3.6);
       this.fireInterval = rand(1.6, 2.6);
       this.altitude = 0;
@@ -143,6 +143,7 @@ export class Enemy {
     scene.remove(this.group);
     this.group.traverse((o) => {
       const m = o as THREE.Mesh;
+      if (m.userData.isOutline) return;
       if (m.geometry) m.geometry.dispose();
       const mat = m.material;
       if (Array.isArray(mat)) mat.forEach((x) => x.dispose());
