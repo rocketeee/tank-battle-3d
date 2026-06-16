@@ -205,17 +205,33 @@ canvas {
   --pad-l: calc(clamp(12px, 2.6vmin, 22px) + env(safe-area-inset-left, 0px));
   --pad-b: calc(clamp(12px, 2.6vmin, 22px) + env(safe-area-inset-bottom, 0px));
 }
+/* left half captures movement touches; the stick floats to the touch point */
+.move-zone {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 50%;
+  height: 100%;
+  pointer-events: auto;
+  touch-action: none;
+}
 .joystick {
   position: absolute;
-  left: var(--pad-l);
-  bottom: var(--pad-b);
+  left: 0;
+  top: 0;
   width: var(--joy);
   height: var(--joy);
+  margin: 0;
+  transform: translate(-50%, -50%);
   border-radius: 50%;
   background: rgba(0, 0, 0, 0.28);
   border: 2px solid rgba(255, 255, 255, 0.22);
-  pointer-events: auto;
+  pointer-events: none;
   touch-action: none;
+  display: none;
+}
+.joystick.active {
+  display: block;
 }
 .joystick .knob {
   position: absolute;
@@ -234,7 +250,7 @@ canvas {
   position: absolute;
   right: 0;
   top: 0;
-  width: 58%;
+  width: 50%;
   height: 100%;
   pointer-events: auto;
   touch-action: none;

@@ -79,6 +79,7 @@ export class HUD {
     this.miniCtx = this.mini.getContext('2d')!;
 
     this.controls = {
+      moveZone: root.querySelector('.move-zone')!,
       joystick: root.querySelector('.joystick')!,
       knob: root.querySelector('.joystick .knob')!,
       aimZone: root.querySelector('.aim-zone')!,
@@ -219,8 +220,9 @@ const TEMPLATE = `
   </div>
 
   <div class="controls">
-    <div class="joystick"><div class="knob"></div></div>
+    <div class="move-zone"></div>
     <div class="aim-zone"></div>
+    <div class="joystick"><div class="knob"></div></div>
     <div class="crosshair"><i></i></div>
     <div class="btns">
       <div class="btn fire"><span class="emoji">💥</span><span class="lbl">开炮</span></div>
