@@ -6,6 +6,7 @@ export interface SkillBtn {
 }
 
 export interface ControlEls {
+  moveZone: HTMLElement;
   joystick: HTMLElement;
   knob: HTMLElement;
   aimZone: HTMLElement;
@@ -15,7 +16,8 @@ export interface ControlEls {
 
 /**
  * Unified input (third-person / PUBG-style):
- *  - left virtual joystick -> `move` (screen space: x right, y down)
+ *  - left half = floating joystick -> `move`: the stick spawns under the touch-down
+ *    point (anywhere in the left half) and follows it; hidden while not touching
  *  - right drag zone -> `lookDelta` (incremental camera yaw/pitch, consumed per frame)
  *  - fire button (hold) + tappable skill buttons (queued, consumed per frame)
  *  - desktop fallbacks: WASD move, mouse-drag look, J fire, Space/1-4 skills, Q/E/R/F look
@@ -42,7 +44,7 @@ export class Input {
 
   constructor(els: ControlEls) {
     this.els = els;
-    this.bindJoystick();
+    this.bindMove();
     this.bindLook();
     this.bindButtons();
     this.bindKeyboard();
@@ -68,22 +70,23 @@ export class Input {
     return d;
   }
 
-  // ----------------------------------------------------------------- joystick
-  private bindJoystick() {
-    const { joystick, knob } = this.els;
-    const rectCenter = () => {
-      const r = joystick.getBoundingClientRect();
-      this.joyCenter.set(r.left + r.width / 2, r.top + r.height / 2);
-      this.joyRadius = r.width / 2 - 6;
-    };
-    joystick.addEventListener('pointerdown', (e) => {
+  // ------------------------------------------------------- floating joystick
+  private bindMove() {
+    const { moveZone, joystick, knob } = this.els;
+    moveZone.addEventListener('pointerdown', (e) => {
+      if (e.pointerType === 'mouse') return; // desktop uses WASD / mouse-look
       e.preventDefault();
       this.joyId = e.pointerId;
-      joystick.setPointerCapture(e.pointerId);
-      rectCenter();
+      moveZone.setPointerCapture(e.pointerId);
+      // spawn the stick centered on the finger and reveal it
+      joystick.style.left = `${e.clientX}px`;
+      joystick.style.top = `${e.clientY}px`;
+      joystick.classList.add('active');
+      this.joyCenter.set(e.clientX, e.clientY);
+      this.joyRadius = joystick.getBoundingClientRect().width / 2 - 6;
       this.updateJoystick(e.clientX, e.clientY, knob);
     });
-    joystick.addEventListener('pointermove', (e) => {
+    moveZone.addEventListener('pointermove', (e) => {
       if (this.joyId !== e.pointerId) return;
       this.updateJoystick(e.clientX, e.clientY, knob);
     });
@@ -92,9 +95,10 @@ export class Input {
       this.joyId = null;
       this.move.set(0, 0);
       knob.style.transform = 'translate(0px, 0px)';
+      joystick.classList.remove('active');
     };
-    joystick.addEventListener('pointerup', end);
-    joystick.addEventListener('pointercancel', end);
+    moveZone.addEventListener('pointerup', end);
+    moveZone.addEventListener('pointercancel', end);
   }
 
   private updateJoystick(cx: number, cy: number, knob: HTMLElement) {
