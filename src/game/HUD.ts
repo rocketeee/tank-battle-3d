@@ -24,8 +24,8 @@ export class HUD {
   private bossNum: HTMLElement;
 
   private chips: HTMLElement[] = [];
-  private jumpBtn: HTMLElement;
-  private jumpCdMask: HTMLElement;
+  private skillEls: { name: string; el: HTMLElement; mask: HTMLElement }[] = [];
+  private crosshair: HTMLElement;
 
   private overlay: HTMLElement;
   private overlayTitle: HTMLElement;
@@ -58,8 +58,13 @@ export class HUD {
     this.bossNum = root.querySelector('.boss .hpnum')!;
 
     this.chips = Array.from(root.querySelectorAll('.chip'));
-    this.jumpBtn = root.querySelector('.btn.jump')!;
-    this.jumpCdMask = root.querySelector('.btn.jump .cdmask')!;
+    this.crosshair = root.querySelector('.crosshair')!;
+    const skillNodes = Array.from(root.querySelectorAll('.btn.skill')) as HTMLElement[];
+    this.skillEls = skillNodes.map((el) => ({
+      name: el.dataset.skill!,
+      el,
+      mask: el.querySelector('.cdmask') as HTMLElement,
+    }));
 
     this.overlay = root.querySelector('.overlay')!;
     this.overlayTitle = root.querySelector('.overlay h1')!;
@@ -78,7 +83,7 @@ export class HUD {
       knob: root.querySelector('.joystick .knob')!,
       aimZone: root.querySelector('.aim-zone')!,
       fireBtn: root.querySelector('.btn.fire')!,
-      jumpBtn: this.jumpBtn,
+      skills: this.skillEls.map((s) => ({ name: s.name, el: s.el })),
     };
 
     this.overlayBtn.addEventListener('click', () => this.onPrimary?.());
@@ -125,9 +130,19 @@ export class HUD {
     this.bossWrap.classList.remove('show');
   }
 
-  setJumpCd(ratio: number) {
-    this.jumpBtn.classList.toggle('cd', ratio > 0.001);
-    this.jumpCdMask.style.setProperty('--cd', `${ratio * 360}deg`);
+  setSkillCd(name: string, ratio: number) {
+    const s = this.skillEls.find((x) => x.name === name);
+    if (!s) return;
+    s.el.classList.toggle('cd', ratio > 0.001);
+    s.mask.style.setProperty('--cd', `${ratio * 360}deg`);
+  }
+
+  showCrosshair() {
+    this.crosshair.classList.add('show');
+  }
+
+  hideCrosshair() {
+    this.crosshair.classList.remove('show');
   }
 
   toast(text: string) {
@@ -206,9 +221,14 @@ const TEMPLATE = `
   <div class="controls">
     <div class="joystick"><div class="knob"></div></div>
     <div class="aim-zone"></div>
+    <div class="crosshair"><i></i></div>
     <div class="btns">
       <div class="btn fire"><span class="emoji">💥</span><span class="lbl">开炮</span></div>
-      <div class="btn jump"><span class="emoji">🔥</span><span class="lbl">跳跃</span><div class="cdmask"></div></div>
+      <div class="btn skill jump" data-skill="jump"><span class="emoji">🔥</span><span class="lbl">跳跃</span><div class="cdmask"></div></div>
+      <div class="btn skill spread" data-skill="spread"><span class="emoji">🔱</span><span class="lbl">散射</span><div class="cdmask"></div></div>
+      <div class="btn skill shield" data-skill="shield"><span class="emoji">🛡️</span><span class="lbl">护盾</span><div class="cdmask"></div></div>
+      <div class="btn skill orbital" data-skill="orbital"><span class="emoji">☄️</span><span class="lbl">天罚</span><div class="cdmask"></div></div>
+      <div class="btn skill dash" data-skill="dash"><span class="emoji">⚡</span><span class="lbl">冲刺</span><div class="cdmask"></div></div>
     </div>
   </div>
 

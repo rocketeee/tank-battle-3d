@@ -182,6 +182,36 @@ export class Particles {
     }
   }
 
+  /** Fading after-image puff left behind while dashing. */
+  dashTrail(pos: THREE.Vector3, color = 0x67e8ff) {
+    const puff = new THREE.Mesh(
+      new THREE.SphereGeometry(0.5, 10, 10),
+      new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.5, depthWrite: false, blending: THREE.AdditiveBlending }),
+    );
+    puff.position.copy(pos);
+    puff.scale.set(0.7, 0.7, 1.6);
+    this.add(puff, 0.28, (e, dt) => {
+      const t = 1 - e.life / e.maxLife;
+      ((e.obj as THREE.Mesh).material as THREE.MeshBasicMaterial).opacity = 0.5 * (1 - t);
+      e.obj.scale.multiplyScalar(1 - 0.4 * dt);
+      e.life -= dt;
+    });
+  }
+
+  /** Orbital strike: bright column dropping from the sky onto a ground point. */
+  orbitalBeam(target: THREE.Vector3, color = 0x9b6bff) {
+    const top = new THREE.Vector3(target.x, target.y + 26, target.z);
+    const geo = new THREE.CylinderGeometry(0.9, 1.4, 26, 16, 1, true);
+    const beam = new THREE.Mesh(geo, new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.0, depthWrite: false, blending: THREE.AdditiveBlending, side: THREE.DoubleSide }));
+    beam.position.copy(top).addScaledVector(new THREE.Vector3(0, -1, 0), 13);
+    this.add(beam, 0.5, (e, dt) => {
+      const t = 1 - e.life / e.maxLife;
+      ((e.obj as THREE.Mesh).material as THREE.MeshBasicMaterial).opacity = Math.sin(t * Math.PI) * 0.85;
+      e.life -= dt;
+    });
+    this.ring(target.clone(), color, 3.5);
+  }
+
   /** Colored energy beam segment fading out (UFO / boss attacks). */
   beam(from: THREE.Vector3, to: THREE.Vector3, color = 0xff6b6b) {
     const dir = new THREE.Vector3().subVectors(to, from);
