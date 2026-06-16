@@ -3,6 +3,8 @@ import { makeGrayAlien, makeUfo } from './AssetFactory';
 import { HealthBar3D } from './HealthBar';
 import { Particles } from './Particles';
 import { rand } from './util';
+import { StatusState } from './roguelite/status';
+import type { HitOpts } from './roguelite/api';
 
 export type EnemyKind = 'alien' | 'ufo';
 
@@ -24,6 +26,8 @@ export class Enemy {
   headY: number;
   scoreValue: number;
   meleeCd = 0;
+  status = new StatusState();
+  isBoss = false;
 
   private bar: HealthBar3D;
   private speed: number;
@@ -86,10 +90,12 @@ export class Enemy {
     const dist = toPlayer.length();
     toPlayer.normalize();
 
+    const slow = this.status.slowFactor();
+
     if (this.kind === 'alien') {
       // approach, keep ~6 units
-      if (dist > 6) p.addScaledVector(toPlayer, this.speed * dt);
-      else if (dist < 4) p.addScaledVector(toPlayer, -this.speed * 0.6 * dt);
+      if (dist > 6) p.addScaledVector(toPlayer, this.speed * slow * dt);
+      else if (dist < 4) p.addScaledVector(toPlayer, -this.speed * 0.6 * slow * dt);
       // face player
       this.group.rotation.y = Math.atan2(toPlayer.x, toPlayer.z);
       // little walk bob
@@ -99,11 +105,13 @@ export class Enemy {
       const orbit = 9;
       const tangent = new THREE.Vector3(-toPlayer.z, 0, toPlayer.x).multiplyScalar(this.strafeDir);
       const radial = dist > orbit ? 1 : dist < orbit - 1.5 ? -1 : 0;
-      p.addScaledVector(tangent, this.speed * dt);
-      p.addScaledVector(toPlayer, radial * this.speed * 0.8 * dt);
+      p.addScaledVector(tangent, this.speed * slow * dt);
+      p.addScaledVector(toPlayer, radial * this.speed * 0.8 * slow * dt);
       p.y = this.altitude + Math.sin(time * 1.5 + this.bobPhase) * 0.5;
       this.group.rotation.y += dt * 1.2;
     }
+
+    if (this.status.frozen) return null; // frozen enemies can't shoot
 
     this.fireTimer -= dt;
     if (this.fireTimer <= 0 && dist < 26) {
@@ -118,10 +126,15 @@ export class Enemy {
   }
 
   /** Returns crit flag + whether killed. */
-  takeDamage(dmg: number, hitY: number, particles: Particles): { crit: boolean; dmg: number; killed: boolean } {
+  takeDamage(dmg: number, hitY: number, particles: Particles, opts?: HitOpts): { crit: boolean; dmg: number; killed: boolean } {
     const headWorldY = this.group.position.y + this.headY;
-    const crit = hitY >= headWorldY - 0.35;
-    const finalDmg = crit ? Math.round(dmg * 2) : dmg;
+    const headHit = hitY >= headWorldY - 0.35;
+    let crit: boolean;
+    if (opts?.noCrit) crit = false;
+    else if (opts?.forceCrit || headHit) crit = true;
+    else crit = Math.random() < ((opts?.critChance ?? 0) + (opts?.bonusCritChance ?? 0));
+    const critMult = opts?.critMult ?? 2;
+    const finalDmg = Math.max(1, Math.round((crit ? dmg * critMult : dmg) * (opts?.damageMult ?? 1)));
     this.hp -= finalDmg;
     this.bar.set(this.hp / this.hpMax);
     const hitPos = new THREE.Vector3(this.group.position.x, hitY, this.group.position.z);

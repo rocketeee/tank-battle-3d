@@ -2,6 +2,8 @@ import * as THREE from 'three';
 import { makeBoss } from './AssetFactory';
 import { Particles } from './Particles';
 import { FireIntent } from './Enemy';
+import { StatusState } from './roguelite/status';
+import type { HitOpts } from './roguelite/api';
 
 const BOSS_CONFIG = [
   { name: '机械统帅', hp: 1500, color: 0x7cff6b, altitude: 0, speed: 2.2 },
@@ -18,6 +20,8 @@ export class Boss {
   radius = 2.4;
   headY: number;
   level: number;
+  status = new StatusState();
+  isBoss = true;
 
   private color: number;
   private altitude: number;
@@ -60,10 +64,11 @@ export class Boss {
     toPlayer.normalize();
 
     // keep mid distance, slowly strafe
-    if (dist > 13) p.addScaledVector(toPlayer, this.speed * dt);
-    else if (dist < 9) p.addScaledVector(toPlayer, -this.speed * dt);
+    const slow = this.status.slowFactor();
+    if (dist > 13) p.addScaledVector(toPlayer, this.speed * slow * dt);
+    else if (dist < 9) p.addScaledVector(toPlayer, -this.speed * slow * dt);
     const tangent = new THREE.Vector3(-toPlayer.z, 0, toPlayer.x);
-    p.addScaledVector(tangent, Math.sin(time * 0.5) * this.speed * 0.6 * dt);
+    p.addScaledVector(tangent, Math.sin(time * 0.5) * this.speed * 0.6 * slow * dt);
     if (this.level === 2) p.y = this.altitude + Math.sin(time * 1.2) * 0.6;
     this.group.rotation.y = Math.atan2(toPlayer.x, toPlayer.z);
     if (this.level === 2) this.group.rotation.y = time * 0.6; // mothership spin
@@ -113,10 +118,15 @@ export class Boss {
     return intents;
   }
 
-  takeDamage(dmg: number, hitY: number, particles: Particles): { crit: boolean; dmg: number; killed: boolean } {
+  takeDamage(dmg: number, hitY: number, particles: Particles, opts?: HitOpts): { crit: boolean; dmg: number; killed: boolean } {
     const headWorldY = this.group.position.y + this.headY;
-    const crit = hitY >= headWorldY - 0.9;
-    const finalDmg = crit ? Math.round(dmg * 2) : dmg;
+    const headHit = hitY >= headWorldY - 0.9;
+    let crit: boolean;
+    if (opts?.noCrit) crit = false;
+    else if (opts?.forceCrit || headHit) crit = true;
+    else crit = Math.random() < ((opts?.critChance ?? 0) + (opts?.bonusCritChance ?? 0));
+    const critMult = opts?.critMult ?? 2;
+    const finalDmg = Math.max(1, Math.round((crit ? dmg * critMult : dmg) * (opts?.damageMult ?? 1)));
     this.hp -= finalDmg;
     const hitPos = new THREE.Vector3(this.group.position.x + (Math.random() - 0.5), hitY, this.group.position.z + (Math.random() - 0.5));
     particles.hit(hitPos, crit);

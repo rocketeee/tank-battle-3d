@@ -1,10 +1,18 @@
 import { ControlEls } from './Input';
+import { RARITY_COLOR, RARITY_LABEL, type SkillDef, type Upgrade } from './roguelite/api';
+import type { RunState } from './roguelite/run';
 
 export interface MiniDot {
   x: number;
   z: number;
   color: string;
   size: number;
+}
+
+export interface ButtonSkill {
+  id: string;
+  def: SkillDef;
+  level: number;
 }
 
 export class HUD {
@@ -18,19 +26,27 @@ export class HUD {
   private levelSub: HTMLElement;
   private scoreVal: HTMLElement;
 
+  private runLevelEl: HTMLElement;
+  private xpFill: HTMLElement;
+
   private bossWrap: HTMLElement;
   private bossName: HTMLElement;
   private bossFill: HTMLElement;
   private bossNum: HTMLElement;
 
   private chips: HTMLElement[] = [];
-  private skillEls: { name: string; el: HTMLElement; mask: HTMLElement }[] = [];
+  private skillCluster: HTMLElement;
+  private skillEls = new Map<string, { el: HTMLElement; mask: HTMLElement }>();
   private crosshair: HTMLElement;
 
   private overlay: HTMLElement;
   private overlayTitle: HTMLElement;
   private overlayBody: HTMLElement;
   private overlayBtn: HTMLButtonElement;
+
+  private cardPick: HTMLElement;
+  private cardList: HTMLElement;
+  private cardTitle: HTMLElement;
 
   private toastEl: HTMLElement;
   private vignette: HTMLElement;
@@ -51,6 +67,8 @@ export class HUD {
     this.levelName = root.querySelector('.level-name')!;
     this.levelSub = root.querySelector('.level-sub')!;
     this.scoreVal = root.querySelector('.score-val')!;
+    this.runLevelEl = root.querySelector('.run-level')!;
+    this.xpFill = root.querySelector('.xpbar > i')!;
 
     this.bossWrap = root.querySelector('.boss')!;
     this.bossName = root.querySelector('.boss .name')!;
@@ -59,17 +77,16 @@ export class HUD {
 
     this.chips = Array.from(root.querySelectorAll('.chip'));
     this.crosshair = root.querySelector('.crosshair')!;
-    const skillNodes = Array.from(root.querySelectorAll('.btn.skill')) as HTMLElement[];
-    this.skillEls = skillNodes.map((el) => ({
-      name: el.dataset.skill!,
-      el,
-      mask: el.querySelector('.cdmask') as HTMLElement,
-    }));
+    this.skillCluster = root.querySelector('.skillcluster')!;
 
     this.overlay = root.querySelector('.overlay')!;
     this.overlayTitle = root.querySelector('.overlay h1')!;
     this.overlayBody = root.querySelector('.overlay .ov-body')!;
     this.overlayBtn = root.querySelector('.overlay .bigbtn')!;
+
+    this.cardPick = root.querySelector('.cardpick')!;
+    this.cardList = root.querySelector('.cardpick .cards')!;
+    this.cardTitle = root.querySelector('.cardpick .cardpick-title')!;
 
     this.toastEl = root.querySelector('.toast')!;
     this.vignette = root.querySelector('.vignette')!;
@@ -84,7 +101,7 @@ export class HUD {
       knob: root.querySelector('.joystick .knob')!,
       aimZone: root.querySelector('.aim-zone')!,
       fireBtn: root.querySelector('.btn.fire')!,
-      skills: this.skillEls.map((s) => ({ name: s.name, el: s.el })),
+      btns: root.querySelector('.btns')!,
     };
 
     this.overlayBtn.addEventListener('click', () => this.onPrimary?.());
@@ -110,6 +127,11 @@ export class HUD {
     this.scoreVal.textContent = String(n);
   }
 
+  setXp(level: number, ratio: number) {
+    this.runLevelEl.textContent = `Lv.${level}`;
+    this.xpFill.style.transform = `scaleX(${Math.max(0, Math.min(1, ratio))})`;
+  }
+
   setChips(activeIdx: number, doneCount: number) {
     this.chips.forEach((c, i) => {
       c.classList.toggle('active', i === activeIdx);
@@ -131,8 +153,26 @@ export class HUD {
     this.bossWrap.classList.remove('show');
   }
 
-  setSkillCd(name: string, ratio: number) {
-    const s = this.skillEls.find((x) => x.name === name);
+  /** Rebuild the dynamic skill button cluster from the run's owned button skills. */
+  setButtonSkills(list: ButtonSkill[]) {
+    this.skillCluster.innerHTML = '';
+    this.skillEls.clear();
+    for (const s of list) {
+      const btn = document.createElement('div');
+      btn.className = 'btn skill';
+      btn.dataset.skill = s.id;
+      btn.innerHTML =
+        `<span class="emoji">${s.def.icon}</span>` +
+        `<span class="lbl">${s.def.name}</span>` +
+        (s.level > 1 ? `<span class="lvlpip">${s.level}</span>` : '') +
+        `<div class="cdmask"></div>`;
+      this.skillCluster.appendChild(btn);
+      this.skillEls.set(s.id, { el: btn, mask: btn.querySelector('.cdmask') as HTMLElement });
+    }
+  }
+
+  setSkillCd(id: string, ratio: number) {
+    const s = this.skillEls.get(id);
     if (!s) return;
     s.el.classList.toggle('cd', ratio > 0.001);
     s.mask.style.setProperty('--cd', `${ratio * 360}deg`);
@@ -144,6 +184,32 @@ export class HUD {
 
   hideCrosshair() {
     this.crosshair.classList.remove('show');
+  }
+
+  /** Level-up card draft: render the rolled upgrades and resolve via onPick. */
+  showCards(cards: Upgrade[], run: RunState, onPick: (up: Upgrade) => void) {
+    this.cardTitle.textContent = `升级！等级 ${run.leveling.level} — 三选一`;
+    this.cardList.innerHTML = '';
+    cards.forEach((up) => {
+      const { current, isNew } = run.cardDisplayLevel(up);
+      const offered = current + 1;
+      const card = document.createElement('div');
+      card.className = `card ${up.rarity}`;
+      card.style.setProperty('--rc', RARITY_COLOR[up.rarity]);
+      card.innerHTML =
+        `<div class="card-rarity">${RARITY_LABEL[up.rarity]}</div>` +
+        `<div class="card-icon">${up.icon}</div>` +
+        `<div class="card-name">${up.name}</div>` +
+        `<div class="card-desc">${up.desc(offered)}</div>` +
+        `<div class="card-lvl">${isNew ? '<b>NEW</b>' : `Lv.${current} → ${offered}`}</div>`;
+      card.addEventListener('click', () => onPick(up));
+      this.cardList.appendChild(card);
+    });
+    this.cardPick.classList.add('show');
+  }
+
+  hideCards() {
+    this.cardPick.classList.remove('show');
   }
 
   toast(text: string) {
@@ -196,11 +262,12 @@ export class HUD {
 
 const TEMPLATE = `
   <div class="vignette"></div>
+  <div class="xpwrap"><div class="xpbar"><i></i></div></div>
   <div class="hud">
     <div class="status hud-panel">
       <div class="row"><span class="ico">❤️</span><div class="hpbar"><i></i></div><span class="hp-text">10/10</span></div>
       <div class="row"><span class="ico">🛡️</span><div class="lives"></div></div>
-      <div class="row"><span class="ico">🚩</span><span class="level-name">森林竞技场</span></div>
+      <div class="row"><span class="ico">⭐</span><span class="run-level">Lv.1</span><span class="level-name">森林竞技场</span></div>
       <div class="row"><span class="ico">🏆</span><span class="score-val">0</span><span class="level-sub" style="opacity:.7;font-size:12px"></span></div>
     </div>
 
@@ -226,11 +293,14 @@ const TEMPLATE = `
     <div class="crosshair"><i></i></div>
     <div class="btns">
       <div class="btn fire"><span class="emoji">💥</span><span class="lbl">开炮</span></div>
-      <div class="btn skill jump" data-skill="jump"><span class="emoji">🔥</span><span class="lbl">跳跃</span><div class="cdmask"></div></div>
-      <div class="btn skill spread" data-skill="spread"><span class="emoji">🔱</span><span class="lbl">散射</span><div class="cdmask"></div></div>
-      <div class="btn skill shield" data-skill="shield"><span class="emoji">🛡️</span><span class="lbl">护盾</span><div class="cdmask"></div></div>
-      <div class="btn skill orbital" data-skill="orbital"><span class="emoji">☄️</span><span class="lbl">天罚</span><div class="cdmask"></div></div>
-      <div class="btn skill dash" data-skill="dash"><span class="emoji">⚡</span><span class="lbl">冲刺</span><div class="cdmask"></div></div>
+      <div class="skillcluster"></div>
+    </div>
+  </div>
+
+  <div class="cardpick">
+    <div class="cardpick-inner">
+      <div class="cardpick-title">升级！三选一</div>
+      <div class="cards"></div>
     </div>
   </div>
 

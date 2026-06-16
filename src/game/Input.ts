@@ -1,9 +1,5 @@
 import * as THREE from 'three';
-
-export interface SkillBtn {
-  name: string;
-  el: HTMLElement;
-}
+import type { Settings } from './Settings';
 
 export interface ControlEls {
   moveZone: HTMLElement;
@@ -11,15 +7,19 @@ export interface ControlEls {
   knob: HTMLElement;
   aimZone: HTMLElement;
   fireBtn: HTMLElement;
-  skills: SkillBtn[];
+  /** Container of the fire + dynamic skill buttons (event-delegated). */
+  btns: HTMLElement;
 }
+
+/** Degrees of device tilt -> equivalent look-drag pixels (tuned against LOOK_SENS). */
+const GYRO_SCALE = 14;
 
 /**
  * Unified input (third-person / PUBG-style):
- *  - left half = floating joystick -> `move`: the stick spawns under the touch-down
- *    point (anywhere in the left half) and follows it; hidden while not touching
- *  - right drag zone -> `lookDelta` (incremental camera yaw/pitch, consumed per frame)
- *  - fire button (hold) + tappable skill buttons (queued, consumed per frame)
+ *  - left half = floating joystick -> `move` (scaled by left sensitivity)
+ *  - right drag zone -> `lookDelta` (scaled by right sensitivity); optional gyroscope
+ *    tilt is folded into the same look stream when enabled in Settings
+ *  - fire button (hold) + event-delegated skill buttons (queued, consumed per frame)
  *  - desktop fallbacks: WASD move, mouse-drag look, J fire, Space/1-4 skills, Q/E/R/F look
  */
 export class Input {
@@ -29,6 +29,7 @@ export class Input {
 
   private skillQueue = new Set<string>();
   private els: ControlEls;
+  private settings: Settings;
   private keys = new Set<string>();
 
   private joyId: number | null = null;
@@ -42,13 +43,27 @@ export class Input {
   private mouseLook = false;
   private mouseLast = new THREE.Vector2();
 
-  constructor(els: ControlEls) {
+  // gyroscope (delta-based, drift-free)
+  private gyroDelta = new THREE.Vector2(0, 0);
+  private gyroBeta: number | null = null;
+  private gyroGamma: number | null = null;
+
+  constructor(els: ControlEls, settings: Settings) {
     this.els = els;
+    this.settings = settings;
     this.bindMove();
     this.bindLook();
     this.bindButtons();
     this.bindKeyboard();
     this.bindMouse();
+    this.bindGyro();
+    settings.onGyroChange = (enabled) => {
+      if (!enabled) {
+        this.gyroBeta = null;
+        this.gyroGamma = null;
+        this.gyroDelta.set(0, 0);
+      }
+    };
   }
 
   consumeSkill(name: string): boolean {
@@ -59,14 +74,24 @@ export class Input {
     return false;
   }
 
+  /** Drop any skill taps that no owned button claimed this frame (avoids stale casts). */
+  clearSkillQueue() {
+    this.skillQueue.clear();
+  }
+
   keyHeld(code: string): boolean {
     return this.keys.has(code);
   }
 
-  /** Returns accumulated look delta (px) and resets it. */
+  /** Returns accumulated look delta (px-equivalent) and resets it. */
   takeLook(): THREE.Vector2 {
-    const d = this.lookDelta.clone();
+    const d = this.lookDelta.clone().multiplyScalar(this.settings.data.rightSens);
     this.lookDelta.set(0, 0);
+    if (this.settings.data.gyroEnabled) {
+      d.x += this.gyroDelta.x * this.settings.data.gyroSens * GYRO_SCALE;
+      d.y += this.gyroDelta.y * this.settings.data.gyroSens * GYRO_SCALE;
+    }
+    this.gyroDelta.set(0, 0);
     return d;
   }
 
@@ -110,7 +135,11 @@ export class Input {
     const kx = Math.cos(ang) * clamped;
     const ky = Math.sin(ang) * clamped;
     knob.style.transform = `translate(${kx}px, ${ky}px)`;
-    this.move.set((Math.cos(ang) * clamped) / this.joyRadius, (Math.sin(ang) * clamped) / this.joyRadius);
+    const sens = this.settings.data.leftSens;
+    this.move.set(
+      ((Math.cos(ang) * clamped) / this.joyRadius) * sens,
+      ((Math.sin(ang) * clamped) / this.joyRadius) * sens,
+    );
   }
 
   // --------------------------------------------------------------- look zone
@@ -138,7 +167,7 @@ export class Input {
 
   // ----------------------------------------------------------------- buttons
   private bindButtons() {
-    const { fireBtn, skills } = this.els;
+    const { fireBtn, btns } = this.els;
     fireBtn.addEventListener('pointerdown', (e) => {
       e.preventDefault();
       fireBtn.classList.add('pressed');
@@ -153,20 +182,20 @@ export class Input {
     fireBtn.addEventListener('pointercancel', fireUp);
     fireBtn.addEventListener('pointerleave', fireUp);
 
-    for (const s of skills) {
-      s.el.addEventListener('pointerdown', (e) => {
-        e.preventDefault();
-        s.el.classList.add('pressed');
-        this.skillQueue.add(s.name);
-      });
-      const up = (e: Event) => {
-        e.preventDefault();
-        s.el.classList.remove('pressed');
-      };
-      s.el.addEventListener('pointerup', up);
-      s.el.addEventListener('pointercancel', up);
-      s.el.addEventListener('pointerleave', up);
-    }
+    // dynamic skill buttons are event-delegated so the HUD can rebuild them freely
+    btns.addEventListener('pointerdown', (e) => {
+      const el = (e.target as HTMLElement).closest('.btn.skill') as HTMLElement | null;
+      if (!el || !el.dataset.skill) return;
+      e.preventDefault();
+      el.classList.add('pressed');
+      this.skillQueue.add(el.dataset.skill);
+    });
+    const clear = (e: Event) => {
+      const el = (e.target as HTMLElement).closest('.btn.skill') as HTMLElement | null;
+      if (el) el.classList.remove('pressed');
+    };
+    btns.addEventListener('pointerup', clear);
+    btns.addEventListener('pointercancel', clear);
   }
 
   // ---------------------------------------------------------------- keyboard
@@ -197,16 +226,15 @@ export class Input {
     if (this.keys.has('KeyD') || this.keys.has('ArrowRight')) x += 1;
     if (this.keys.has('KeyW') || this.keys.has('ArrowUp')) y -= 1;
     if (this.keys.has('KeyS') || this.keys.has('ArrowDown')) y += 1;
-    if (x || y) this.move.set(x, y).normalize();
+    if (x || y) this.move.set(x, y).normalize().multiplyScalar(this.settings.data.leftSens);
     else if (this.joyId === null) this.move.set(0, 0);
   }
 
   // ------------------------------------------------------------ desktop mouse
   private bindMouse() {
-    const canvas = () => document.querySelector('canvas');
     window.addEventListener('mousedown', (e) => {
       const t = e.target as HTMLElement;
-      if (t.closest('.btn,.bigbtn,.joystick')) return;
+      if (t.closest('.btn,.bigbtn,.joystick,.settings-gear,.settings-panel')) return;
       if (e.button === 0) {
         // left side fires, right side starts a look-drag
         if (e.clientX < window.innerWidth * 0.45) {
@@ -229,6 +257,26 @@ export class Input {
         this.mouseLook = false;
       }
     });
-    void canvas;
+  }
+
+  // -------------------------------------------------------------- gyroscope
+  private bindGyro() {
+    window.addEventListener('deviceorientation', (e) => {
+      if (!this.settings.data.gyroEnabled) {
+        this.gyroBeta = null;
+        this.gyroGamma = null;
+        return;
+      }
+      const beta = e.beta;
+      const gamma = e.gamma;
+      if (beta === null || gamma === null) return;
+      if (this.gyroBeta !== null && this.gyroGamma !== null) {
+        // gamma (left-right tilt) -> yaw, beta (front-back tilt) -> pitch
+        this.gyroDelta.x += gamma - this.gyroGamma;
+        this.gyroDelta.y += beta - this.gyroBeta;
+      }
+      this.gyroBeta = beta;
+      this.gyroGamma = gamma;
+    });
   }
 }

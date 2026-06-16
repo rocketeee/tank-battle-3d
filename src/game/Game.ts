@@ -2,16 +2,21 @@ import * as THREE from 'three';
 import { Player } from './Player';
 import { Enemy } from './Enemy';
 import { Boss } from './Boss';
-import { BulletManager } from './Bullet';
+import { BulletManager, Bullet } from './Bullet';
 import { Particles } from './Particles';
 import { FloatingTextManager } from './HealthBar';
 import { AudioEngine } from './Audio';
 import { Input } from './Input';
 import { HUD, MiniDot } from './HUD';
+import { Settings } from './Settings';
 import { LEVELS, buildEnvironment, Environment, PLAY_BOUNDS, ARENA_RADIUS } from './levels';
 import { rand, clamp, damp } from './util';
+import { RunState } from './roguelite/run';
+import { BASE } from './roguelite/stats';
+import type { GameApi, Damageable, HitOpts, StatusApply, SpawnBulletOpts, BulletEffect, Upgrade } from './roguelite/api';
+import './roguelite/packs'; // side-effect: registers the whole skill + upgrade catalog
 
-type State = 'menu' | 'intro' | 'playing' | 'cleared' | 'gameover' | 'victory';
+type State = 'menu' | 'intro' | 'playing' | 'levelup' | 'cleared' | 'gameover' | 'victory';
 
 const PLAYER_RADIUS = 1.1;
 const SCREEN_CENTER = new THREE.Vector2(0, 0);
@@ -32,6 +37,11 @@ export class Game {
   private player: Player;
   private hud: HUD;
   private input: Input;
+  private settings: Settings;
+
+  // roguelike run state (stats / xp / owned skills / upgrades)
+  private run = new RunState();
+  private readonly api: GameApi;
 
   private state: State = 'menu';
   private levelIndex = 0;
@@ -73,10 +83,14 @@ export class Game {
     this.floaters = new FloatingTextManager(this.scene);
     this.bullets = new BulletManager(this.scene);
     this.player = new Player(this.scene, this.particles, this.audio);
+    this.player.bindStats(this.run.stats);
 
     this.hud = new HUD(root);
-    this.input = new Input(this.hud.controls);
+    this.settings = new Settings(root);
+    this.input = new Input(this.hud.controls, this.settings);
     this.hud.onPrimary = () => this.onPrimary();
+
+    this.api = this.buildApi();
 
     window.addEventListener('resize', () => this.onResize());
 
@@ -89,26 +103,64 @@ export class Game {
     this.loop();
   }
 
+  // --------------------------------------------------------------- game api
+  /** The world-facing surface passed to every skill so packs never import Game. */
+  private buildApi(): GameApi {
+    const self = this;
+    return {
+      get stats() {
+        return self.run.stats;
+      },
+      get run() {
+        return self.run;
+      },
+      get player() {
+        return self.player;
+      },
+      get camYaw() {
+        return self.camYaw;
+      },
+      set camYaw(v: number) {
+        self.camYaw = v;
+      },
+      get aimPoint() {
+        return self.aimPoint;
+      },
+      set aimPoint(v: THREE.Vector3) {
+        self.aimPoint = v;
+      },
+      particles: this.particles,
+      audio: this.audio,
+      playerPos: () => self.player.worldPos(),
+      groundAim: () => self.groundAim(),
+      enemies: () => self.aliveDamageables(),
+      nearest: (pos, count, maxRange, exclude) => self.nearest(pos, count, maxRange, exclude),
+      spawnBullet: (opts) => self.spawnBullet(opts),
+      dealDamage: (target, amount, opts, statuses) => self.dealDamage(target, amount, opts, statuses),
+      dealAoe: (pos, radius, amount, opts, statuses) => self.dealAoe(pos, radius, amount, opts, statuses),
+      applyStatus: (target, apply) => self.applyStatusToTarget(target, apply),
+      toast: (text) => self.hud.toast(text),
+    };
+  }
+
   // -------------------------------------------------------------- state flow
   private showMenu() {
     this.state = 'menu';
     this.hud.hideCrosshair();
     this.hud.showOverlay(
-      '萌坦大战 <span class="sub">TANK BATTLE 3D</span>',
-      `驾驶萌系小坦克,横扫<span class="tag">森林 · 沙漠 · 外星球</span>三大战场,击败每关 BOSS!<br/><br/>
+      '萌坦大战 <span class="sub">ROGUELIKE</span>',
+      `驾驶萌系小坦克横扫<span class="tag">森林 · 沙漠 · 外星球</span>,击败每关 BOSS!<br/><br/>
        <span class="hint-row">
-         <span><b>左侧摇杆</b> 移动(随视角)</span>
+         <span><b>左侧摇杆</b> 移动(跟手浮动)</span>
          <span><b>右侧拖动</b> 转动整个视角</span>
          <span><b>💥 开炮</b> 准星射击(爆头暴击)</span>
        </span>
        <span class="hint-row" style="margin-top:8px">
-         <span><b>🔥 跳跃</b> 喷火冲击波</span>
-         <span><b>🔱 散射</b> 扇形弹幕</span>
-         <span><b>🛡️ 护盾</b> 短暂无敌</span>
-         <span><b>☄️ 天罚</b> 轨道打击</span>
-         <span><b>⚡ 冲刺</b> 残影突进</span>
+         <span><b>🛡️ 初始仅护盾</b></span>
+         <span><b>击杀小兵升级</b> → 弹出 3 张技能卡三选一</span>
+         <span><b>技能叠加协同</b> 火/冰/雷/标记 build</span>
        </span><br/>
-       <span style="opacity:.8;font-size:13px">3 条命 · 阵亡后无敌闪烁 3 秒 · 电脑端:WASD 移动 / 鼠标右拖转视角 / J 开炮 / 空格·1·2·3·4 技能</span>`,
+       <span style="opacity:.8;font-size:13px">3 条命 · 阵亡后无敌闪烁 3 秒 · 右上角 ⚙ 可调灵敏度/陀螺仪 · 电脑端:WASD 移动 / 鼠标右拖转视角 / J 开炮 / 空格·1·2·3·4 技能</span>`,
       '开始游戏',
     );
   }
@@ -118,7 +170,10 @@ export class Game {
     if (this.state === 'menu' || this.state === 'gameover' || this.state === 'victory') {
       this.score = 0;
       this.levelIndex = this.startLevel;
-      this.player.reset(new THREE.Vector3(0, 0, 0));
+      this.run.reset();
+      this.player.bindStats(this.run.stats);
+      this.player.syncMaxHp(true);
+      this.hud.setButtonSkills(this.run.buttonSkills());
       this.loadLevel(this.startLevel);
     } else if (this.state === 'cleared') {
       if (this.levelIndex + 1 >= LEVELS.length) {
@@ -140,7 +195,7 @@ export class Game {
     this.camPitch = 0.12;
     this.lookIdle = 0;
     this.hud.showCrosshair();
-    // keep score across levels; refresh HUD
+    // keep score + run progression across levels; refresh HUD
     this.waveIndex = 0;
     this.boss = null;
     this.hud.hideBoss();
@@ -149,7 +204,10 @@ export class Game {
     this.hud.setHP(this.player.hp, this.player.hpMax);
     this.hud.setLives(this.player.lives, this.player.livesMax);
     this.hud.setScore(this.score);
+    this.hud.setXp(this.run.leveling.level, this.run.leveling.ratio());
+    this.hud.setButtonSkills(this.run.buttonSkills());
     this.hud.hideOverlay();
+    this.hud.hideCards();
     this.hud.toast(`第 ${index + 1} 关 · ${cfg.shortName}`);
     this.audio.levelUp();
     this.state = 'intro';
@@ -202,7 +260,7 @@ export class Game {
     const last = this.levelIndex + 1 >= LEVELS.length;
     this.hud.showOverlay(
       last ? '最终胜利!' : '关卡完成!',
-      `得分 <span class="tag">${this.score}</span> · 剩余生命 <span class="tag">${this.player.lives}</span><br/>${last ? '你解放了被外星人控制的星球!' : '准备进入下一战场……'}`,
+      `得分 <span class="tag">${this.score}</span> · 等级 <span class="tag">Lv.${this.run.leveling.level}</span> · 剩余生命 <span class="tag">${this.player.lives}</span><br/>${last ? '你解放了被外星人控制的星球!' : '战力与技能将带入下一战场……'}`,
       last ? '查看战绩' : '下一关',
     );
     this.audio.levelUp();
@@ -213,7 +271,7 @@ export class Game {
     this.clearEntities();
     this.hud.showOverlay(
       '通关胜利! <span class="sub">VICTORY</span>',
-      `最终得分 <span class="tag">${this.score}</span><br/>恭喜击败全部三关 BOSS,守护了和平!`,
+      `最终得分 <span class="tag">${this.score}</span> · 等级 <span class="tag">Lv.${this.run.leveling.level}</span><br/>恭喜击败全部三关 BOSS,守护了和平!`,
       '再玩一次',
     );
   }
@@ -221,9 +279,10 @@ export class Game {
   private gameOver() {
     this.state = 'gameover';
     this.hud.hideBoss();
+    this.hud.hideCards();
     this.hud.showOverlay(
       '游戏结束 <span class="sub">GAME OVER</span>',
-      `最终得分 <span class="tag">${this.score}</span><br/>再接再厉,坦克指挥官!`,
+      `最终得分 <span class="tag">${this.score}</span> · 等级 <span class="tag">Lv.${this.run.leveling.level}</span><br/>再接再厉,坦克指挥官!`,
       '重新开始',
     );
   }
@@ -258,6 +317,11 @@ export class Game {
       if (this.introTimer <= 0) this.startWaves();
       return;
     }
+    if (this.state === 'levelup') {
+      // freeze the simulation while the card draft is open; keep framing the tank
+      this.cameraThirdPerson(dt);
+      return;
+    }
     if (this.state !== 'playing') {
       this.player.cameraLerp(this.camera, dt);
       return;
@@ -272,30 +336,31 @@ export class Game {
     this.player.update(dt, this.input, desiredAimYaw, this.camYaw, PLAY_BOUNDS);
     this.cameraThirdPerson(dt);
 
-    // ---- fire + skills ----
+    // ---- fire (multishot via projCount) ----
     if (this.input.fireHeld) {
       const shot = this.player.tryFire(this.aimPoint);
-      if (shot) this.bullets.spawn({ pos: shot.pos, dir: shot.dir, speed: 42, damage: 14, fromPlayer: true });
+      if (shot) this.fireMain(shot.pos, shot.dir);
     }
-    if (this.input.consumeSkill('jump')) this.player.tryJump();
-    if (this.input.consumeSkill('dash')) this.player.tryDash(this.camYaw);
-    if (this.input.consumeSkill('shield')) {
-      if (this.player.tryShield()) this.hud.toast('🛡️ 能量护盾!');
+
+    // ---- button skills (dynamic, driven by owned skills) ----
+    for (const s of this.run.buttonSkills()) {
+      if (this.input.consumeSkill(s.id)) this.run.castButton(s.id, this.api);
     }
-    if (this.input.consumeSkill('spread')) {
-      const shots = this.player.trySpread();
-      if (shots) {
-        for (const s of shots) this.bullets.spawn({ pos: s.pos, dir: s.dir, speed: 38, damage: 12, fromPlayer: true, color: 0xffa83b });
-        this.hud.toast('🔱 三连散射!');
-      }
-    }
-    if (this.input.consumeSkill('orbital')) {
-      if (this.player.tryOrbital()) this.castOrbital();
-    }
+    this.input.clearSkillQueue();
+
+    // ---- auto skills + cooldowns ----
+    this.run.updateSkills(dt, this.api);
 
     // jump landing shockwave AOE
     const shock = this.player.consumeLandShock();
-    if (shock) this.applyShock(shock.pos, shock.radius, shock.damage);
+    if (shock) {
+      this.dealAoe(
+        new THREE.Vector3(shock.pos.x, 0.5, shock.pos.z),
+        shock.radius * this.run.stats.areaMult,
+        shock.damage * this.run.stats.damageMult,
+        {},
+      );
+    }
 
     // ---- enemies ----
     const playerPos = this.player.worldPos();
@@ -326,6 +391,9 @@ export class Game {
       this.hud.updateBoss(this.boss.hp, this.boss.hpMax);
     }
 
+    // ---- damage-over-time + status timers ----
+    this.tickStatuses(dt);
+
     // ---- bullets + collisions ----
     this.bullets.update(dt, ARENA_RADIUS + 20);
     this.handleCollisions();
@@ -333,19 +401,39 @@ export class Game {
     // ---- wave / boss progression ----
     this.progress();
 
+    // ---- level-up draft (open after combat resolution) ----
+    if (this.state === 'playing' && this.run.leveling.pendingLevels > 0) this.openLevelUp();
+
     // ---- HUD ----
     this.hud.setHP(this.player.hp, this.player.hpMax);
     this.hud.setLives(this.player.lives, this.player.livesMax);
     this.hud.setScore(this.score);
-    this.hud.setSkillCd('jump', this.player.cdRatio('jump'));
-    this.hud.setSkillCd('spread', this.player.cdRatio('spread'));
-    this.hud.setSkillCd('shield', this.player.cdRatio('shield'));
-    this.hud.setSkillCd('orbital', this.player.cdRatio('orbital'));
-    this.hud.setSkillCd('dash', this.player.cdRatio('dash'));
+    this.hud.setXp(this.run.leveling.level, this.run.leveling.ratio());
+    for (const s of this.run.buttonSkills()) this.hud.setSkillCd(s.id, this.run.cdRatio(s.id));
     this.updateMinimap();
   }
 
-  /** Apply look input (touch drag / mouse drag / keyboard) to the free-look camera. */
+  // ----------------------------------------------------------- level-up flow
+  private openLevelUp() {
+    this.state = 'levelup';
+    this.audio.levelUp();
+    const cards = this.run.rollCards(3);
+    this.hud.showCards(cards, this.run, (up) => this.pickCard(up));
+  }
+
+  private pickCard(up: Upgrade) {
+    this.run.applyUpgrade(up);
+    const heal = this.run.consumeHeal();
+    if (heal > 0) this.player.heal(heal);
+    this.player.syncMaxHp(false);
+    this.run.leveling.pendingLevels -= 1;
+    this.hud.setButtonSkills(this.run.buttonSkills());
+    this.hud.hideCards();
+    if (this.run.leveling.pendingLevels > 0) this.openLevelUp();
+    else this.state = 'playing';
+  }
+
+  /** Apply look input (touch drag / mouse drag / keyboard / gyro) to the free-look camera. */
   private updateLook(dt: number) {
     const look = this.input.takeLook();
     let active = false;
@@ -363,8 +451,6 @@ export class Game {
 
     if (active) this.lookIdle = 0;
     else this.lookIdle += dt;
-    // note: the camera/crosshair is driven ONLY by look input (right thumb) — driving
-    // with the left stick never rotates the view, so the aim stays where you point it.
   }
 
   /** Third-person follow camera positioned behind/above the tank, orbited by camYaw/camPitch. */
@@ -412,7 +498,8 @@ export class Game {
     return ray.origin.clone().addScaledVector(ray.direction, 45);
   }
 
-  private castOrbital() {
+  /** Clamped ground point under the crosshair (used by orbital-style skills). */
+  private groundAim(): THREE.Vector3 {
     this.raycaster.setFromCamera(SCREEN_CENTER, this.camera);
     const hit = new THREE.Vector3();
     if (!this.raycaster.ray.intersectPlane(this.groundPlane, hit)) {
@@ -421,36 +508,159 @@ export class Game {
     hit.x = clamp(hit.x, -PLAY_BOUNDS, PLAY_BOUNDS);
     hit.z = clamp(hit.z, -PLAY_BOUNDS, PLAY_BOUNDS);
     hit.y = 0;
-    this.particles.orbitalBeam(hit.clone(), 0x9b6bff);
-    this.hud.toast('☄️ 轨道天降打击!');
-    this.audio.bossWarn();
-    window.setTimeout(() => {
-      if (this.state !== 'playing') return;
-      this.particles.explosion(new THREE.Vector3(hit.x, 0.6, hit.z), 0x9b6bff, 2.8);
-      this.particles.ring(new THREE.Vector3(hit.x, 0.1, hit.z), 0xc39bff, 7);
-      this.audio.explosion();
-      this.applyOrbital(hit, 7.5, 140);
-    }, 430);
+    return hit;
   }
 
-  private applyOrbital(pos: THREE.Vector3, radius: number, damage: number) {
-    for (const e of [...this.enemies]) {
-      if (!e.alive) continue;
-      const d = Math.hypot(e.group.position.x - pos.x, e.group.position.z - pos.z);
-      if (d < radius) {
-        const res = e.takeDamage(damage, e.group.position.y + e.headY, this.particles);
-        this.floaters.spawn(new THREE.Vector3(e.group.position.x, e.group.position.y + e.headY + 0.4, e.group.position.z), res.crit ? `${res.dmg}!` : `${res.dmg}`, res.crit);
-        if (res.killed) this.killEnemy(e);
-      }
+  // ----------------------------------------------------------- combat helpers
+  /** Main cannon: fan of `projCount` pellets through the on-hit pipeline. */
+  private fireMain(pos: THREE.Vector3, dir: THREE.Vector3) {
+    const stats = this.run.stats;
+    const count = Math.max(1, Math.round(stats.projCount));
+    const speed = BASE.fireSpeed * stats.projSpeed;
+    const damage = BASE.fireDamage * stats.damageMult;
+    const half = (count - 1) / 2;
+    const spreadAng = 0.07;
+    const up = new THREE.Vector3(0, 1, 0);
+    for (let i = 0; i < count; i++) {
+      const a = (i - half) * spreadAng;
+      const d = dir.clone().applyAxisAngle(up, a);
+      this.spawnBullet({ pos: pos.clone(), dir: d, speed, damage });
     }
-    if (this.boss && this.boss.alive) {
-      const d = Math.hypot(this.boss.group.position.x - pos.x, this.boss.group.position.z - pos.z);
-      if (d < radius + 2) {
-        const res = this.boss.takeDamage(damage, this.boss.group.position.y + this.boss.headY, this.particles);
-        this.hud.updateBoss(this.boss.hp, this.boss.hpMax);
-        if (res.killed) this.killBoss();
-      }
+  }
+
+  /** Spawn a player projectile, folding global on-hit statuses + pierce into its effect. */
+  private spawnBullet(opts: SpawnBulletOpts) {
+    const stats = this.run.stats;
+    const statuses: StatusApply[] = [...(opts.effect?.statuses ?? [])];
+    if (stats.onHitBurn > 0) statuses.push({ type: 'burn', amount: stats.onHitBurn * stats.burnDmgMult, dur: 3 });
+    if (stats.onHitChill > 0) statuses.push({ type: 'chill', amount: stats.onHitChill, dur: 2.2 });
+    if (stats.onHitShock) statuses.push({ type: 'shock', dur: 4 });
+    if (stats.onHitMarkStacks > 0) statuses.push({ type: 'mark', stacks: stats.onHitMarkStacks, dur: 5 });
+    const effect: BulletEffect = {
+      pierce: (opts.effect?.pierce ?? 0) + stats.pierce,
+      statuses,
+      bonusCritChance: opts.effect?.bonusCritChance ?? 0,
+      source: opts.effect?.source ?? 'basic',
+    };
+    this.bullets.spawn({
+      pos: opts.pos,
+      dir: opts.dir,
+      speed: opts.speed,
+      damage: opts.damage,
+      fromPlayer: true,
+      color: opts.color,
+      size: opts.size,
+      life: opts.life,
+      effect,
+    });
+  }
+
+  /** Resolve a damage instance against a target, applying stat-derived crit + mark. */
+  private dealHit(target: Damageable, amount: number, hitY: number, opts?: HitOpts) {
+    const stats = this.run.stats;
+    const o: HitOpts = { ...opts };
+    if (o.critMult === undefined) o.critMult = stats.critMult;
+    if (!o.noCrit && !o.forceCrit) {
+      let cc = (o.critChance ?? stats.critChance) + (o.bonusCritChance ?? 0);
+      if (stats.chillCritBonus > 0 && (target.status.has('chill') || target.status.frozen)) cc += stats.chillCritBonus;
+      o.critChance = cc;
+      o.bonusCritChance = 0;
     }
+    let dm = o.damageMult ?? 1;
+    if (target.status.markStacks > 0) dm *= target.status.markMultiplier(stats.markPerStack) * stats.markDmgMult;
+    o.damageMult = dm;
+    return target.takeDamage(amount, hitY, this.particles, o);
+  }
+
+  private spawnFloater(target: Damageable, res: { crit: boolean; dmg: number; killed: boolean }) {
+    const p = target.group.position;
+    this.floaters.spawn(
+      new THREE.Vector3(p.x, p.y + target.headY + 0.4, p.z),
+      res.crit ? `${res.dmg}!` : `${res.dmg}`,
+      res.crit,
+    );
+  }
+
+  private onDamageableKilled(target: Damageable) {
+    if (target.isBoss) {
+      this.killBoss();
+      return;
+    }
+    const e = this.enemies.find((x) => x === target);
+    if (e) this.killEnemy(e);
+  }
+
+  /** Skill / AOE damage (no headshot bias — uses target center height). */
+  private dealDamage(target: Damageable, amount: number, opts?: HitOpts, statuses?: StatusApply[]) {
+    if (!target.alive) return;
+    const hitY = target.group.position.y + target.headY * 0.5;
+    const res = this.dealHit(target, amount, hitY, opts);
+    this.spawnFloater(target, res);
+    if (statuses) for (const s of statuses) this.applyStatusToTarget(target, s);
+    if (res.killed) this.onDamageableKilled(target);
+    else if (target.isBoss && this.boss) this.hud.updateBoss(this.boss.hp, this.boss.hpMax);
+  }
+
+  private dealAoe(pos: THREE.Vector3, radius: number, amount: number, opts?: HitOpts, statuses?: StatusApply[]) {
+    for (const t of this.aliveDamageables()) {
+      const dx = t.group.position.x - pos.x;
+      const dz = t.group.position.z - pos.z;
+      const rr = radius + (t.isBoss ? 2 : 0);
+      if (dx * dx + dz * dz < rr * rr) this.dealDamage(t, amount, opts, statuses);
+    }
+  }
+
+  private applyStatusToTarget(target: Damageable, apply: StatusApply) {
+    const st = target.status;
+    switch (apply.type) {
+      case 'burn':
+        st.applyBurn(apply.amount ?? 0, apply.dur);
+        break;
+      case 'chill':
+        if (this.run.stats.freezeOnChill && st.has('chill')) st.freeze(Math.max(1, apply.dur));
+        else st.applyChill(apply.amount ?? 0, apply.dur);
+        break;
+      case 'shock':
+        st.applyShock(apply.dur);
+        break;
+      case 'mark':
+        st.applyMark(apply.stacks ?? 1, apply.dur);
+        break;
+    }
+  }
+
+  /** Per-frame status ticking (burn DoT + timer decay) for all live targets. */
+  private tickStatuses(dt: number) {
+    for (const t of this.aliveDamageables()) {
+      const burn = t.status.tick(dt);
+      if (burn > 0 && t.alive) this.dealDamage(t, burn, { noCrit: true });
+    }
+  }
+
+  private aliveDamageables(): Damageable[] {
+    const out: Damageable[] = this.enemies.filter((e) => e.alive);
+    if (this.boss && this.boss.alive) out.push(this.boss);
+    return out;
+  }
+
+  private nearest(pos: THREE.Vector3, count: number, maxRange: number, exclude?: Damageable[]): Damageable[] {
+    const ex = new Set(exclude ?? []);
+    return this.aliveDamageables()
+      .filter((t) => !ex.has(t))
+      .map((t) => ({ t, d: Math.hypot(t.group.position.x - pos.x, t.group.position.z - pos.z) }))
+      .filter((o) => o.d <= maxRange)
+      .sort((a, b) => a.d - b.d)
+      .slice(0, count)
+      .map((o) => o.t);
+  }
+
+  private bulletHit(b: Bullet, target: Damageable) {
+    const res = this.dealHit(target, b.damage, b.mesh.position.y, { bonusCritChance: b.effect.bonusCritChance });
+    this.spawnFloater(target, res);
+    this.audio[res.crit ? 'crit' : 'hit']();
+    for (const s of b.effect.statuses) this.applyStatusToTarget(target, s);
+    if (res.killed) this.onDamageableKilled(target);
+    else if (target.isBoss && this.boss) this.hud.updateBoss(this.boss.hp, this.boss.hpMax);
   }
 
   private handleCollisions() {
@@ -458,34 +668,31 @@ export class Game {
       if (!b.alive) continue;
       const bp = b.mesh.position;
       if (b.fromPlayer) {
-        // vs enemies
-        for (const e of this.enemies) {
-          if (!e.alive) continue;
+        for (const e of [...this.enemies]) {
+          if (!e.alive || b.hits.has(e)) continue;
           const ep = e.group.position;
           const dx = ep.x - bp.x;
           const dz = ep.z - bp.z;
           if (dx * dx + dz * dz < (e.radius + b.radius) ** 2 && bp.y < ep.y + e.headY + 0.8) {
-            const res = e.takeDamage(b.damage, bp.y, this.particles);
-            this.floaters.spawn(new THREE.Vector3(ep.x, ep.y + e.headY + 0.4, ep.z), res.crit ? `${res.dmg}!` : `${res.dmg}`, res.crit);
-            this.audio[res.crit ? 'crit' : 'hit']();
-            this.bullets.kill(b);
-            if (res.killed) this.killEnemy(e);
-            break;
+            b.hits.add(e);
+            this.bulletHit(b, e);
+            b.hitsLeft -= 1;
+            if (b.hitsLeft <= 0) {
+              this.bullets.kill(b);
+              break;
+            }
           }
         }
         if (!b.alive) continue;
-        // vs boss
-        if (this.boss && this.boss.alive) {
+        if (this.boss && this.boss.alive && !b.hits.has(this.boss)) {
           const bo = this.boss.group.position;
           const dx = bo.x - bp.x;
           const dz = bo.z - bp.z;
           if (dx * dx + dz * dz < (this.boss.radius + b.radius) ** 2 && bp.y < bo.y + this.boss.headY + 1) {
-            const res = this.boss.takeDamage(b.damage, bp.y, this.particles);
-            this.floaters.spawn(new THREE.Vector3(bp.x, bp.y + 0.6, bp.z), res.crit ? `${res.dmg}!` : `${res.dmg}`, res.crit);
-            this.audio[res.crit ? 'crit' : 'hit']();
-            this.hud.updateBoss(this.boss.hp, this.boss.hpMax);
-            this.bullets.kill(b);
-            if (res.killed) this.killBoss();
+            b.hits.add(this.boss);
+            this.bulletHit(b, this.boss);
+            b.hitsLeft -= 1;
+            if (b.hitsLeft <= 0) this.bullets.kill(b);
           }
         }
       } else {
@@ -501,28 +708,17 @@ export class Game {
     }
   }
 
-  private applyShock(pos: THREE.Vector3, radius: number, damage: number) {
-    for (const e of this.enemies) {
-      if (!e.alive || e.kind === 'ufo') continue; // shock hits ground units
-      const d = Math.hypot(e.group.position.x - pos.x, e.group.position.z - pos.z);
-      if (d < radius) {
-        const res = e.takeDamage(damage, e.group.position.y + e.headY, this.particles);
-        this.floaters.spawn(new THREE.Vector3(e.group.position.x, e.group.position.y + e.headY + 0.4, e.group.position.z), `${res.dmg}`, false);
-        if (res.killed) this.killEnemy(e);
-      }
-    }
-    if (this.boss && this.boss.alive && this.boss.level !== 2) {
-      const d = Math.hypot(this.boss.group.position.x - pos.x, this.boss.group.position.z - pos.z);
-      if (d < radius + 2) {
-        const res = this.boss.takeDamage(damage, this.boss.group.position.y + this.boss.headY, this.particles);
-        this.hud.updateBoss(this.boss.hp, this.boss.hpMax);
-        if (res.killed) this.killBoss();
-      }
-    }
+  /** Spread fire to nearby foes when a burning enemy dies (Inferno evolution). */
+  private spreadBurn(dead: Enemy) {
+    const dps = Math.max(4, dead.status.burnDps * 0.6);
+    for (const t of this.nearest(dead.group.position, 4, 6, [dead])) t.status.applyBurn(dps, 2.5);
+    this.particles.explosion(new THREE.Vector3(dead.group.position.x, 0.6, dead.group.position.z), 0xff6b3b, 1.4);
   }
 
   private killEnemy(e: Enemy) {
+    if (this.run.stats.burnSpread && e.status.has('burn')) this.spreadBurn(e);
     this.score += e.scoreValue;
+    this.run.leveling.addKill(e.kind, this.run.stats.xpGain);
     e.dispose(this.scene, this.particles);
     this.audio.explosion();
     const idx = this.enemies.indexOf(e);
