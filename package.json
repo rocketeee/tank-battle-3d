@@ -21,11 +21,15 @@
   "author": "rocketeee",
   "license": "MIT",
   "devDependencies": {
+    "@capacitor/assets": "^3.0.5",
     "@types/three": "^0.160.0",
     "typescript": "^5.5.4",
     "vite": "^5.4.2"
   },
   "dependencies": {
+    "@capacitor/android": "^6.2.1",
+    "@capacitor/cli": "^6.2.1",
+    "@capacitor/core": "^6.2.1",
     "three": "^0.160.1"
   }
 }
