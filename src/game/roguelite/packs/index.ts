@@ -9,3 +9,7 @@ import './ice';
 import './lightning';
 import './physical';
 import './summon';
+import './melee';
+import './ballistics';
+import './drones';
+import './fusion';
