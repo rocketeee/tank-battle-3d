@@ -56,8 +56,8 @@ canvas {
 /* top-left status */
 .status {
   position: absolute;
-  top: env(safe-area-inset-top, 12px);
-  left: 12px;
+  top: max(env(safe-area-inset-top, 0px), 12px);
+  left: max(env(safe-area-inset-left, 0px), 12px);
   padding: 10px 14px;
   display: flex;
   flex-direction: column;
@@ -118,7 +118,7 @@ canvas {
 /* top-center boss bar */
 .boss {
   position: absolute;
-  top: env(safe-area-inset-top, 14px);
+  top: max(env(safe-area-inset-top, 0px), 14px);
   left: 50%;
   transform: translateX(-50%);
   width: min(46vw, 460px);
@@ -162,8 +162,8 @@ canvas {
 /* top-right level chips */
 .levels {
   position: absolute;
-  top: env(safe-area-inset-top, 12px);
-  right: 12px;
+  top: max(env(safe-area-inset-top, 0px), 12px);
+  right: max(env(safe-area-inset-right, 0px), 12px);
   display: flex;
   gap: 8px;
 }
@@ -195,13 +195,22 @@ canvas {
   inset: 0;
   pointer-events: none;
   z-index: 12;
+  /* responsive control sizing (in landscape, 1vmin == 1% of screen height) */
+  --gap: clamp(6px, 1.4vmin, 11px);
+  --joy: clamp(94px, 25vmin, 130px);
+  --knob: clamp(40px, 11vmin, 58px);
+  --fire: clamp(58px, 16vmin, 84px);
+  --btn: clamp(42px, 11.2vmin, 56px);
+  --pad-r: calc(clamp(12px, 2.6vmin, 22px) + env(safe-area-inset-right, 0px));
+  --pad-l: calc(clamp(12px, 2.6vmin, 22px) + env(safe-area-inset-left, 0px));
+  --pad-b: calc(clamp(12px, 2.6vmin, 22px) + env(safe-area-inset-bottom, 0px));
 }
 .joystick {
   position: absolute;
-  left: 26px;
-  bottom: 30px;
-  width: 132px;
-  height: 132px;
+  left: var(--pad-l);
+  bottom: var(--pad-b);
+  width: var(--joy);
+  height: var(--joy);
   border-radius: 50%;
   background: rgba(0, 0, 0, 0.28);
   border: 2px solid rgba(255, 255, 255, 0.22);
@@ -212,29 +221,27 @@ canvas {
   position: absolute;
   left: 50%;
   top: 50%;
-  width: 58px;
-  height: 58px;
-  margin: -29px 0 0 -29px;
+  width: var(--knob);
+  height: var(--knob);
+  margin: calc(var(--knob) / -2) 0 0 calc(var(--knob) / -2);
   border-radius: 50%;
   background: radial-gradient(circle at 35% 30%, #aee27e, #5fa83a);
   border: 2px solid rgba(255, 255, 255, 0.5);
   box-shadow: 0 3px 8px rgba(0, 0, 0, 0.4);
 }
+/* right half is the look/aim drag area (PUBG-style); skill buttons sit in the corner */
 .aim-zone {
   position: absolute;
   right: 0;
-  bottom: 0;
-  width: 55%;
+  top: 0;
+  width: 58%;
   height: 100%;
   pointer-events: auto;
   touch-action: none;
 }
 .btns {
   position: absolute;
-  right: 18px;
-  bottom: 26px;
-  width: 234px;
-  height: 240px;
+  inset: 0;
   pointer-events: none;
 }
 
@@ -315,46 +322,54 @@ canvas {
   filter: brightness(1.25);
 }
 .btn.fire {
-  right: 8px;
-  bottom: 8px;
-  width: 90px;
-  height: 90px;
+  right: var(--pad-r);
+  bottom: var(--pad-b);
+  width: var(--fire);
+  height: var(--fire);
   background: radial-gradient(circle at 35% 30%, #ff8a5b, #e23b2e);
 }
+.btn.fire .emoji {
+  font-size: clamp(20px, 5.6vmin, 26px);
+}
+.btn.fire .lbl {
+  font-size: clamp(10px, 2.8vmin, 12px);
+}
 .btn.skill {
-  width: 58px;
-  height: 58px;
+  width: var(--btn);
+  height: var(--btn);
 }
 .btn.skill .emoji {
-  font-size: 19px;
+  font-size: clamp(15px, 4.4vmin, 20px);
 }
 .btn.skill .lbl {
-  font-size: 10px;
+  font-size: clamp(8px, 2.4vmin, 10px);
 }
+/* bottom row: fire | jump | spread */
 .btn.jump {
-  right: 112px;
-  bottom: 8px;
+  right: calc(var(--pad-r) + var(--fire) + var(--gap));
+  bottom: var(--pad-b);
   background: radial-gradient(circle at 35% 30%, #ffb15b, #e2742e);
 }
 .btn.spread {
-  right: 166px;
-  bottom: 70px;
+  right: calc(var(--pad-r) + var(--fire) + var(--btn) + var(--gap) * 2);
+  bottom: var(--pad-b);
   background: radial-gradient(circle at 35% 30%, #ffd05b, #d69a2f);
 }
+/* top row: dash (over fire) | shield (over jump) | orbital (over spread) */
+.btn.dash {
+  right: calc(var(--pad-r) + (var(--fire) - var(--btn)) / 2);
+  bottom: calc(var(--pad-b) + var(--fire) + var(--gap));
+  background: radial-gradient(circle at 35% 30%, #7bffb0, #2fb37a);
+}
 .btn.shield {
-  right: 146px;
-  bottom: 140px;
+  right: calc(var(--pad-r) + var(--fire) + var(--gap));
+  bottom: calc(var(--pad-b) + var(--fire) + var(--gap));
   background: radial-gradient(circle at 35% 30%, #67e0ff, #2f9fd6);
 }
 .btn.orbital {
-  right: 80px;
-  bottom: 178px;
+  right: calc(var(--pad-r) + var(--fire) + var(--btn) + var(--gap) * 2);
+  bottom: calc(var(--pad-b) + var(--fire) + var(--gap));
   background: radial-gradient(circle at 35% 30%, #c39bff, #7a3fd6);
-}
-.btn.dash {
-  right: 12px;
-  bottom: 148px;
-  background: radial-gradient(circle at 35% 30%, #7bffb0, #2fb37a);
 }
 .btn.cd {
   filter: grayscale(0.7) brightness(0.6);
@@ -367,13 +382,13 @@ canvas {
   pointer-events: none;
 }
 
-/* minimap */
+/* minimap (top-right, just under the level chips) */
 .minimap {
   position: absolute;
-  right: 18px;
-  bottom: 280px;
-  width: 116px;
-  height: 116px;
+  right: max(env(safe-area-inset-right, 0px), 12px);
+  top: calc(max(env(safe-area-inset-top, 0px), 12px) + 56px);
+  width: clamp(84px, 22vmin, 116px);
+  height: clamp(84px, 22vmin, 116px);
   border-radius: 50%;
   overflow: hidden;
   border: 2px solid rgba(255, 255, 255, 0.25);

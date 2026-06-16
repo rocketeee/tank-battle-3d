@@ -9,7 +9,7 @@ import { AudioEngine } from './Audio';
 import { Input } from './Input';
 import { HUD, MiniDot } from './HUD';
 import { LEVELS, buildEnvironment, Environment, PLAY_BOUNDS, ARENA_RADIUS } from './levels';
-import { rand, clamp, damp, angleDelta } from './util';
+import { rand, clamp, damp } from './util';
 
 type State = 'menu' | 'intro' | 'playing' | 'cleared' | 'gameover' | 'victory';
 
@@ -363,11 +363,8 @@ export class Game {
 
     if (active) this.lookIdle = 0;
     else this.lookIdle += dt;
-
-    // gentle auto-trail behind the tank when driving and not actively looking
-    if (this.lookIdle > 1.2 && this.input.move.lengthSq() > 0.05) {
-      this.camYaw += angleDelta(this.camYaw, this.player.bodyYaw) * (1 - Math.exp(-1.3 * dt));
-    }
+    // note: the camera/crosshair is driven ONLY by look input (right thumb) — driving
+    // with the left stick never rotates the view, so the aim stays where you point it.
   }
 
   /** Third-person follow camera positioned behind/above the tank, orbited by camYaw/camPitch. */
