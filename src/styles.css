@@ -231,11 +231,60 @@ canvas {
 }
 .btns {
   position: absolute;
-  right: 24px;
-  bottom: 34px;
-  width: 200px;
-  height: 200px;
+  right: 18px;
+  bottom: 26px;
+  width: 234px;
+  height: 240px;
   pointer-events: none;
+}
+
+/* center aiming reticle */
+.crosshair {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 46px;
+  height: 46px;
+  margin: -23px 0 0 -23px;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.25s ease;
+  z-index: 13;
+}
+.crosshair.show {
+  opacity: 0.92;
+}
+.crosshair::before,
+.crosshair::after {
+  content: '';
+  position: absolute;
+  background: rgba(255, 255, 255, 0.85);
+  box-shadow: 0 0 4px rgba(0, 0, 0, 0.7);
+}
+.crosshair::before {
+  left: 50%;
+  top: 0;
+  width: 2px;
+  height: 100%;
+  margin-left: -1px;
+}
+.crosshair::after {
+  top: 50%;
+  left: 0;
+  height: 2px;
+  width: 100%;
+  margin-top: -1px;
+}
+.crosshair i {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 8px;
+  height: 8px;
+  margin: -4px 0 0 -4px;
+  border-radius: 50%;
+  background: var(--accent);
+  box-shadow: 0 0 6px rgba(255, 213, 74, 0.9);
 }
 .btn {
   position: absolute;
@@ -266,18 +315,46 @@ canvas {
   filter: brightness(1.25);
 }
 .btn.fire {
-  right: 0;
-  bottom: 28px;
-  width: 92px;
-  height: 92px;
+  right: 8px;
+  bottom: 8px;
+  width: 90px;
+  height: 90px;
   background: radial-gradient(circle at 35% 30%, #ff8a5b, #e23b2e);
 }
+.btn.skill {
+  width: 58px;
+  height: 58px;
+}
+.btn.skill .emoji {
+  font-size: 19px;
+}
+.btn.skill .lbl {
+  font-size: 10px;
+}
 .btn.jump {
-  right: 98px;
-  bottom: 6px;
-  width: 70px;
-  height: 70px;
-  background: radial-gradient(circle at 35% 30%, #67d2ff, #2f7fd6);
+  right: 112px;
+  bottom: 8px;
+  background: radial-gradient(circle at 35% 30%, #ffb15b, #e2742e);
+}
+.btn.spread {
+  right: 166px;
+  bottom: 70px;
+  background: radial-gradient(circle at 35% 30%, #ffd05b, #d69a2f);
+}
+.btn.shield {
+  right: 146px;
+  bottom: 140px;
+  background: radial-gradient(circle at 35% 30%, #67e0ff, #2f9fd6);
+}
+.btn.orbital {
+  right: 80px;
+  bottom: 178px;
+  background: radial-gradient(circle at 35% 30%, #c39bff, #7a3fd6);
+}
+.btn.dash {
+  right: 12px;
+  bottom: 148px;
+  background: radial-gradient(circle at 35% 30%, #7bffb0, #2fb37a);
 }
 .btn.cd {
   filter: grayscale(0.7) brightness(0.6);
@@ -294,7 +371,7 @@ canvas {
 .minimap {
   position: absolute;
   right: 18px;
-  bottom: 240px;
+  bottom: 280px;
   width: 116px;
   height: 116px;
   border-radius: 50%;
