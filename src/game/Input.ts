@@ -87,11 +87,14 @@ export class Input {
 
   /** Returns accumulated look delta (px-equivalent) and resets it. */
   takeLook(): THREE.Vector2 {
-    const d = this.lookDelta.clone().multiplyScalar(this.settings.data.rightSens);
+    const s = this.settings.data;
+    const d = this.lookDelta.clone().multiplyScalar(s.rightSens);
     this.lookDelta.set(0, 0);
-    if (this.settings.data.gyroEnabled) {
-      d.x += this.gyroDelta.x * this.settings.data.gyroSens * GYRO_SCALE;
-      d.y += this.gyroDelta.y * this.settings.data.gyroSens * GYRO_SCALE;
+    if (s.lookInvertY) d.y = -d.y;
+    if (s.gyroEnabled) {
+      const gy = s.gyroInvertY ? -this.gyroDelta.y : this.gyroDelta.y;
+      d.x += this.gyroDelta.x * s.gyroSens * GYRO_SCALE;
+      d.y += gy * s.gyroSens * GYRO_SCALE;
     }
     this.gyroDelta.set(0, 0);
     return d;

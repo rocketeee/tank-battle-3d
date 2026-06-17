@@ -10,6 +10,10 @@ export interface SettingsData {
   rightSens: number;
   gyroEnabled: boolean;
   gyroSens: number;
+  /** Invert vertical (pitch) look from the gyroscope. On by default (feels natural tilt-to-look). */
+  gyroInvertY: boolean;
+  /** Invert vertical (pitch) look from the right-side drag/stick. */
+  lookInvertY: boolean;
 }
 
 type DeviceOrientationCtor = typeof DeviceOrientationEvent & {
@@ -17,7 +21,14 @@ type DeviceOrientationCtor = typeof DeviceOrientationEvent & {
 };
 
 const KEY = 'tankbattle.settings.v1';
-const DEFAULTS: SettingsData = { leftSens: 1, rightSens: 1, gyroEnabled: false, gyroSens: 1 };
+const DEFAULTS: SettingsData = {
+  leftSens: 1,
+  rightSens: 1,
+  gyroEnabled: false,
+  gyroSens: 1,
+  gyroInvertY: true,
+  lookInvertY: false,
+};
 const SENS_MIN = 0.4;
 const SENS_MAX = 2.5;
 
@@ -53,6 +64,8 @@ export class Settings {
     this.bindSlider('right', 'rightSens');
     this.bindSlider('gyro', 'gyroSens');
     this.bindGyroToggle();
+    this.bindInvertToggle('gyro-invert', 'gyroInvertY');
+    this.bindInvertToggle('look-invert', 'lookInvertY');
     this.syncUI();
   }
 
@@ -66,6 +79,8 @@ export class Settings {
         rightSens: clampSens(parsed.rightSens ?? DEFAULTS.rightSens),
         gyroEnabled: !!parsed.gyroEnabled,
         gyroSens: clampSens(parsed.gyroSens ?? DEFAULTS.gyroSens),
+        gyroInvertY: parsed.gyroInvertY ?? DEFAULTS.gyroInvertY,
+        lookInvertY: parsed.lookInvertY ?? DEFAULTS.lookInvertY,
       };
     } catch {
       return { ...DEFAULTS };
@@ -118,6 +133,14 @@ export class Settings {
     });
   }
 
+  private bindInvertToggle(cls: string, field: 'gyroInvertY' | 'lookInvertY') {
+    const toggle = this.panel.querySelector(`.${cls}`) as HTMLInputElement;
+    toggle.addEventListener('change', () => {
+      this.data[field] = toggle.checked;
+      this.save();
+    });
+  }
+
   /** iOS 13+ requires an explicit gesture-gated permission for motion sensors. */
   private async requestGyroPermission(): Promise<boolean> {
     const ctor = (typeof DeviceOrientationEvent !== 'undefined' ? DeviceOrientationEvent : undefined) as
@@ -145,6 +168,8 @@ export class Settings {
     set('right', 'rightSens');
     set('gyro', 'gyroSens');
     (this.panel.querySelector('.gyro-toggle') as HTMLInputElement).checked = this.data.gyroEnabled;
+    (this.panel.querySelector('.gyro-invert') as HTMLInputElement).checked = this.data.gyroInvertY;
+    (this.panel.querySelector('.look-invert') as HTMLInputElement).checked = this.data.lookInvertY;
     this.panel.classList.toggle('gyro-on', this.data.gyroEnabled);
   }
 }
@@ -163,6 +188,12 @@ const TEMPLATE = `
         <div class="setting-ctl"><input type="range" class="sens-right" min="0.4" max="2.5" step="0.05"><span class="val val-right">1.00x</span></div>
       </div>
       <div class="setting-row">
+        <label>视角上下反转（右摇杆）</label>
+        <div class="setting-ctl toggle-ctl">
+          <label class="switch"><input type="checkbox" class="look-invert"><span class="slider-track"></span></label>
+        </div>
+      </div>
+      <div class="setting-row">
         <label>陀螺仪控制视角</label>
         <div class="setting-ctl toggle-ctl">
           <label class="switch"><input type="checkbox" class="gyro-toggle"><span class="slider-track"></span></label>
@@ -171,6 +202,12 @@ const TEMPLATE = `
       <div class="setting-row gyro-only">
         <label>陀螺仪灵敏度</label>
         <div class="setting-ctl"><input type="range" class="sens-gyro" min="0.4" max="2.5" step="0.05"><span class="val val-gyro">1.00x</span></div>
+      </div>
+      <div class="setting-row gyro-only">
+        <label>陀螺仪上下反转</label>
+        <div class="setting-ctl toggle-ctl">
+          <label class="switch"><input type="checkbox" class="gyro-invert"><span class="slider-track"></span></label>
+        </div>
       </div>
       <p class="settings-hint">陀螺仪开启后，倾斜手机即可微调视角，可与右摇杆叠加使用。</p>
       <button class="bigbtn settings-close">关闭</button>
