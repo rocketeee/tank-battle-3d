@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import type { Settings } from './Settings';
+import { remapGyroDelta, screenAngle } from './gyro';
 
 export interface ControlEls {
   moveZone: HTMLElement;
@@ -47,6 +48,7 @@ export class Input {
   private gyroDelta = new THREE.Vector2(0, 0);
   private gyroBeta: number | null = null;
   private gyroGamma: number | null = null;
+  private gyroAngle: number | null = null;
 
   constructor(els: ControlEls, settings: Settings) {
     this.els = els;
@@ -270,13 +272,23 @@ export class Input {
       const beta = e.beta;
       const gamma = e.gamma;
       if (beta === null || gamma === null) return;
-      if (this.gyroBeta !== null && this.gyroGamma !== null) {
-        // gamma (left-right tilt) -> yaw, beta (front-back tilt) -> pitch
-        this.gyroDelta.x += gamma - this.gyroGamma;
-        this.gyroDelta.y += beta - this.gyroBeta;
+      // beta/gamma are reported in the device's natural (portrait) frame.
+      // Rotate the tilt deltas by the current screen angle so look matches
+      // how the phone is physically held (the game runs locked in landscape).
+      const angle = screenAngle();
+      if (this.gyroBeta !== null && this.gyroGamma !== null && angle === this.gyroAngle) {
+        const dx = gamma - this.gyroGamma; // device left-right tilt
+        const dy = beta - this.gyroBeta; //  device front-back tilt
+        const { yaw, pitch } = remapGyroDelta(dx, dy, angle);
+        // skip axis-wrap spikes (gamma at ±90, beta at ±180)
+        if (Math.abs(yaw) < 45 && Math.abs(pitch) < 45) {
+          this.gyroDelta.x += yaw;
+          this.gyroDelta.y += pitch;
+        }
       }
       this.gyroBeta = beta;
       this.gyroGamma = gamma;
+      this.gyroAngle = angle;
     });
   }
 }
