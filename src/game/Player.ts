@@ -4,23 +4,11 @@ import { Particles } from './Particles';
 import { AudioEngine } from './Audio';
 import { Input } from './Input';
 import { clamp, damp, rotateToward } from './util';
+import { PlayerStats, BASE } from './roguelite/stats';
 
-const HP_MAX = 10;
 const LIVES_MAX = 3;
-const SPEED = 9;
-const FIRE_RATE = 0.3;
-
-const JUMP_CD = 3.0;
 const JUMP_VY = 9;
 const GRAVITY = 24;
-
-const SPREAD_CD = 4.5;
-const SHIELD_CD = 12;
-const SHIELD_DUR = 4;
-const ORBITAL_CD = 13;
-const DASH_CD = 5;
-const DASH_DUR = 0.24;
-const DASH_SPEED = 34;
 
 export interface LandShock {
   pos: THREE.Vector3;
@@ -31,7 +19,7 @@ export interface LandShock {
 export class Player {
   group: THREE.Group;
   private turret: THREE.Object3D;
-  private shield: THREE.Mesh;
+  private shieldMesh: THREE.Mesh;
   pos = new THREE.Vector3(0, 0, 0);
 
   bodyYaw = 0;
@@ -41,8 +29,8 @@ export class Player {
   y = 0;
   airborne = false;
 
-  hp = HP_MAX;
-  hpMax = HP_MAX;
+  hp = BASE.maxHp;
+  hpMax = BASE.maxHp;
   lives = LIVES_MAX;
   livesMax = LIVES_MAX;
   dead = false;
@@ -50,15 +38,13 @@ export class Player {
   invincible = 0;
   fireCd = 0;
 
-  jumpCd = 0;
-  spreadCd = 0;
-  shieldCd = 0;
-  orbitalCd = 0;
-  dashCd = 0;
-
   shieldTime = 0;
   private dashTime = 0;
   private dashDir = new THREE.Vector3();
+  private regenCarry = 0;
+
+  /** Per-run stats; bound by Game once the RunState is created. */
+  stats: PlayerStats = new PlayerStats();
 
   private particles: Particles;
   private audio: AudioEngine;
@@ -67,21 +53,33 @@ export class Player {
   constructor(scene: THREE.Scene, particles: Particles, audio: AudioEngine) {
     this.group = makeTank();
     this.turret = this.group.getObjectByName('turret')!;
-    this.shield = new THREE.Mesh(
+    this.shieldMesh = new THREE.Mesh(
       new THREE.SphereGeometry(2.1, 20, 16),
       new THREE.MeshBasicMaterial({ color: 0x5fd8ff, transparent: true, opacity: 0.0, depthWrite: false, blending: THREE.AdditiveBlending, side: THREE.DoubleSide }),
     );
-    this.shield.position.y = 1.0;
-    this.shield.visible = false;
-    this.group.add(this.shield);
+    this.shieldMesh.position.y = 1.0;
+    this.shieldMesh.visible = false;
+    this.group.add(this.shieldMesh);
     scene.add(this.group);
     this.particles = particles;
     this.audio = audio;
   }
 
+  bindStats(stats: PlayerStats) {
+    this.stats = stats;
+  }
+
+  /** Re-read max HP from stats (after a card raises it). `refill` tops the bar off. */
+  syncMaxHp(refill: boolean) {
+    this.hpMax = this.stats.maxHp;
+    if (refill) this.hp = this.hpMax;
+    else this.hp = Math.min(this.hp, this.hpMax);
+  }
+
   reset(pos: THREE.Vector3) {
     this.pos.copy(pos);
-    this.hp = HP_MAX;
+    this.hpMax = this.stats.maxHp;
+    this.hp = this.hpMax;
     this.lives = LIVES_MAX;
     this.dead = false;
     this.vy = 0;
@@ -89,13 +87,9 @@ export class Player {
     this.airborne = false;
     this.invincible = 0;
     this.fireCd = 0;
-    this.jumpCd = 0;
-    this.spreadCd = 0;
-    this.shieldCd = 0;
-    this.orbitalCd = 0;
-    this.dashCd = 0;
     this.shieldTime = 0;
     this.dashTime = 0;
+    this.regenCarry = 0;
     this.bodyYaw = 0;
     this.aimYaw = 0;
     this.group.visible = true;
@@ -103,17 +97,6 @@ export class Player {
 
   get protectedNow(): boolean {
     return this.invincible > 0 || this.shieldTime > 0;
-  }
-
-  cdRatio(name: string): number {
-    switch (name) {
-      case 'jump': return clamp(this.jumpCd / JUMP_CD, 0, 1);
-      case 'spread': return clamp(this.spreadCd / SPREAD_CD, 0, 1);
-      case 'shield': return clamp(this.shieldCd / SHIELD_CD, 0, 1);
-      case 'orbital': return clamp(this.orbitalCd / ORBITAL_CD, 0, 1);
-      case 'dash': return clamp(this.dashCd / DASH_CD, 0, 1);
-      default: return 0;
-    }
   }
 
   /**
@@ -124,6 +107,7 @@ export class Player {
     if (this.dead) return;
 
     // --- movement (camera-relative) ---
+    const speed = BASE.moveSpeed * this.stats.moveSpeed;
     const mv = input.move;
     const mag = Math.min(1, Math.hypot(mv.x, mv.y));
     if (mag > 0.08 && this.dashTime <= 0) {
@@ -134,14 +118,14 @@ export class Player {
         dir.normalize();
         const moveYaw = Math.atan2(dir.x, dir.z);
         this.bodyYaw = rotateToward(this.bodyYaw, moveYaw, 9 * dt);
-        this.pos.addScaledVector(dir, SPEED * mag * dt);
+        this.pos.addScaledVector(dir, speed * mag * dt);
       }
     }
 
     // --- dash motion ---
     if (this.dashTime > 0) {
       this.dashTime -= dt;
-      this.pos.addScaledVector(this.dashDir, DASH_SPEED * dt);
+      this.pos.addScaledVector(this.dashDir, 34 * dt);
       this.particles.dashTrail(new THREE.Vector3(this.pos.x, this.y + 0.6, this.pos.z), 0x67e8ff);
     }
     this.pos.x = clamp(this.pos.x, -bounds, bounds);
@@ -162,21 +146,26 @@ export class Player {
       }
     }
 
+    // --- regen ---
+    if (this.stats.regen > 0 && this.hp < this.hpMax && !this.dead) {
+      this.regenCarry += this.stats.regen * dt;
+      if (this.regenCarry >= 1) {
+        const whole = Math.floor(this.regenCarry);
+        this.regenCarry -= whole;
+        this.hp = Math.min(this.hpMax, this.hp + whole);
+      }
+    }
+
     // --- timers ---
     this.fireCd = Math.max(0, this.fireCd - dt);
-    this.jumpCd = Math.max(0, this.jumpCd - dt);
-    this.spreadCd = Math.max(0, this.spreadCd - dt);
-    this.shieldCd = Math.max(0, this.shieldCd - dt);
-    this.orbitalCd = Math.max(0, this.orbitalCd - dt);
-    this.dashCd = Math.max(0, this.dashCd - dt);
 
     if (this.shieldTime > 0) {
       this.shieldTime -= dt;
-      this.shield.visible = true;
+      this.shieldMesh.visible = true;
       const pulse = 0.32 + Math.sin(performance.now() * 0.012) * 0.1;
-      (this.shield.material as THREE.MeshBasicMaterial).opacity = this.shieldTime > 0 ? pulse : 0;
-      this.shield.scale.setScalar(1 + Math.sin(performance.now() * 0.02) * 0.03);
-      if (this.shieldTime <= 0) this.shield.visible = false;
+      (this.shieldMesh.material as THREE.MeshBasicMaterial).opacity = this.shieldTime > 0 ? pulse : 0;
+      this.shieldMesh.scale.setScalar(1 + Math.sin(performance.now() * 0.02) * 0.03);
+      if (this.shieldTime <= 0) this.shieldMesh.visible = false;
     }
 
     if (this.invincible > 0) {
@@ -205,41 +194,36 @@ export class Player {
     return s;
   }
 
-  // -------------------------------------------------------------- skills
-  tryJump(): boolean {
-    if (this.jumpCd > 0 || this.airborne) return false;
+  // -------------------------------------------------------------- skill primitives
+  jump() {
+    if (this.airborne) return;
     this.airborne = true;
     this.vy = JUMP_VY;
-    this.jumpCd = JUMP_CD;
     this.particles.jetFlame(new THREE.Vector3(this.pos.x, 0.1, this.pos.z));
     this.audio.jump();
-    return true;
   }
 
-  tryShield(): boolean {
-    if (this.shieldCd > 0) return false;
-    this.shieldCd = SHIELD_CD;
-    this.shieldTime = SHIELD_DUR;
-    this.particles.ring(new THREE.Vector3(this.pos.x, 0.2, this.pos.z), 0x5fd8ff, 3);
-    this.audio.jump();
-    return true;
+  shield(dur: number) {
+    this.shieldTime = Math.max(this.shieldTime, dur);
   }
 
-  tryDash(camYaw: number): boolean {
-    if (this.dashCd > 0 || this.airborne) return false;
-    this.dashCd = DASH_CD;
-    this.dashTime = DASH_DUR;
+  dash(camYaw: number, dur: number, _speed: number) {
+    if (this.airborne) return;
+    this.dashTime = dur;
     this.dashDir.set(Math.sin(camYaw), 0, Math.cos(camYaw)).normalize();
     this.bodyYaw = Math.atan2(this.dashDir.x, this.dashDir.z);
     this.shieldTime = Math.max(this.shieldTime, 0.35);
-    this.audio.jump();
-    return true;
+  }
+
+  heal(amount: number) {
+    if (amount <= 0) return;
+    this.hp = Math.min(this.hpMax, this.hp + amount);
   }
 
   /** Returns world muzzle position + direction toward `target` if ready, else null. */
   tryFire(target: THREE.Vector3 | null): { pos: THREE.Vector3; dir: THREE.Vector3 } | null {
     if (this.fireCd > 0 || this.dead) return null;
-    this.fireCd = FIRE_RATE;
+    this.fireCd = BASE.fireInterval / this.stats.fireRateMult;
     const pos = this.muzzleWorld();
     const dir = target
       ? new THREE.Vector3().subVectors(target, pos).normalize()
@@ -249,31 +233,7 @@ export class Player {
     return { pos, dir };
   }
 
-  /** Spread skill: returns a fan of muzzle pos/dir, or null if on cooldown. */
-  trySpread(): { pos: THREE.Vector3; dir: THREE.Vector3 }[] | null {
-    if (this.spreadCd > 0 || this.dead) return null;
-    this.spreadCd = SPREAD_CD;
-    const pos = this.muzzleWorld();
-    const out: { pos: THREE.Vector3; dir: THREE.Vector3 }[] = [];
-    const spread = 0.3;
-    for (let i = -2; i <= 2; i++) {
-      const a = this.aimYaw + i * spread;
-      out.push({ pos: pos.clone(), dir: new THREE.Vector3(Math.sin(a), 0, Math.cos(a)).normalize() });
-    }
-    this.particles.muzzle(pos.clone(), 0xffa83b);
-    this.particles.muzzle(pos.clone(), 0xff6b6b);
-    this.audio.fire();
-    return out;
-  }
-
-  tryOrbital(): boolean {
-    if (this.orbitalCd > 0) return false;
-    this.orbitalCd = ORBITAL_CD;
-    this.audio.fire();
-    return true;
-  }
-
-  private muzzleWorld(): THREE.Vector3 {
+  muzzleWorld(): THREE.Vector3 {
     this.group.updateMatrixWorld(true);
     const local = (this.group.userData.muzzleLocal as THREE.Vector3).clone();
     return this.turret.localToWorld(local);
@@ -282,7 +242,8 @@ export class Player {
   /** Apply damage. Returns 'dead' if all lives lost, 'life' if a life was lost, 'hit' otherwise, '' if ignored. */
   takeDamage(dmg: number): '' | 'hit' | 'life' | 'dead' {
     if (this.protectedNow || this.dead) return '';
-    this.hp -= dmg;
+    const reduced = dmg * (1 - clamp(this.stats.armor, 0, 0.85));
+    this.hp -= reduced;
     this.audio.hurt();
     if (this.hp <= 0) {
       this.lives -= 1;

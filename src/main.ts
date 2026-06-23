@@ -29,12 +29,19 @@ function dismissIntro() {
 intro.addEventListener('pointerdown', dismissIntro);
 window.setTimeout(dismissIntro, 2800);
 
-// best-effort landscape lock on first user gesture (native APK is locked via manifest)
-function tryLockLandscape() {
+// On the first touch gesture (mobile/web), go immersive: request fullscreen so the
+// browser/system status bar stops covering the HUD, then lock to landscape. The native
+// APK already hides the system bars + forces landscape, so this only matters on the web.
+function enterImmersive() {
+  const touch = 'ontouchstart' in window || navigator.maxTouchPoints > 0;
+  if (touch) {
+    const el = document.documentElement as HTMLElement & { requestFullscreen?: () => Promise<void> };
+    el.requestFullscreen?.().catch(() => {});
+  }
   const o = screen.orientation as ScreenOrientation & { lock?: (o: string) => Promise<void> };
   o?.lock?.('landscape').catch(() => {});
 }
-window.addEventListener('pointerdown', tryLockLandscape, { once: true });
+window.addEventListener('pointerdown', enterImmersive, { once: true });
 
 // loading screen while modules init
 const loading = document.createElement('div');

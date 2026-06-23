@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import type { BulletEffect } from './roguelite/api';
 
 export interface Bullet {
   mesh: THREE.Mesh;
@@ -8,6 +9,9 @@ export interface Bullet {
   radius: number;
   life: number;
   alive: boolean;
+  effect: BulletEffect;
+  hitsLeft: number;
+  hits: Set<object>;
 }
 
 export class BulletManager {
@@ -28,6 +32,7 @@ export class BulletManager {
     radius?: number;
     size?: number;
     life?: number;
+    effect?: BulletEffect;
   }): Bullet {
     const color = opts.color ?? (opts.fromPlayer ? 0xffd54a : 0x7cff6b);
     const size = opts.size ?? (opts.fromPlayer ? 0.22 : 0.18);
@@ -40,6 +45,7 @@ export class BulletManager {
     // orient streak along travel dir
     mesh.quaternion.setFromUnitVectors(new THREE.Vector3(0, 0, 1), opts.dir.clone().normalize());
     this.scene.add(mesh);
+    const effect: BulletEffect = opts.effect ?? { pierce: 0, statuses: [], bonusCritChance: 0, source: 'basic' };
     const b: Bullet = {
       mesh,
       vel: opts.dir.clone().normalize().multiplyScalar(opts.speed),
@@ -48,6 +54,9 @@ export class BulletManager {
       radius: opts.radius ?? size + 0.15,
       life: opts.life ?? 3,
       alive: true,
+      effect,
+      hitsLeft: 1 + Math.max(0, Math.round(effect.pierce)),
+      hits: new Set<object>(),
     };
     this.list.push(b);
     return b;
