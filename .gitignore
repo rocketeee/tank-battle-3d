@@ -1,0 +1,15 @@
+# Godot
+.godot/
+*.import
+# export_presets.cfg  -- kept in repo for reproducible builds
+
+# Android build
+android/build/
+*.apk
+*.aab
+*.keystore
+
+# OS
+.DS_Store
+Thumbs.db
+*.swp
