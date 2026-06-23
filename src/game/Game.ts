@@ -421,7 +421,10 @@ export class Game {
     this.hud.setButtonSkills(this.run.buttonSkills());
     this.hud.hideCards();
     if (this.run.leveling.pendingLevels > 0) this.openLevelUp();
-    else this.state = 'playing';
+    else {
+      this.state = 'playing';
+      if (this.spawnsPending && this.enemies.length === 0) this.spawnWave();
+    }
   }
 
   /** Apply look input (touch drag / mouse drag / keyboard / gyro) to the free-look camera. */
