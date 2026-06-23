@@ -447,46 +447,61 @@ canvas {
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 18px;
+  gap: clamp(6px, 2vh, 18px);
   text-align: center;
   color: #fff;
   background: radial-gradient(circle at 50% 30%, rgba(30, 45, 90, 0.55), rgba(6, 10, 22, 0.92));
   backdrop-filter: blur(3px);
-  padding: 24px;
+  padding: clamp(8px, 3vh, 24px) clamp(12px, 4vw, 24px);
+  overflow-y: auto;
 }
 .overlay.hidden {
   display: none;
 }
 .overlay h1 {
-  font-size: clamp(28px, 7vw, 54px);
+  font-size: clamp(20px, 5vmin, 48px);
   letter-spacing: 2px;
   text-shadow: 0 4px 0 rgba(0, 0, 0, 0.35), 0 0 22px rgba(126, 217, 87, 0.5);
+  margin: 0;
 }
 .overlay h1 .sub {
   display: block;
   font-size: 0.42em;
   letter-spacing: 6px;
   color: var(--accent);
-  margin-top: 6px;
+  margin-top: clamp(2px, 0.5vh, 6px);
 }
 .overlay p {
-  font-size: 15px;
-  line-height: 1.7;
-  max-width: 520px;
+  font-size: clamp(11px, 2.2vmin, 15px);
+  line-height: 1.6;
+  max-width: min(520px, 90vw);
   opacity: 0.92;
   font-weight: 500;
+  margin: 0;
 }
 .overlay .tag {
   color: var(--accent);
+}
+.overlay .hint-compact {
+  display: block;
+  font-size: clamp(10px, 1.8vmin, 13px);
+  opacity: 0.9;
+  margin-top: 2px;
+}
+.overlay .hint-compact b { color: var(--accent); }
+.overlay .hint-tiny {
+  display: block;
+  font-size: clamp(9px, 1.5vmin, 12px);
+  opacity: 0.6;
 }
 .bigbtn {
   pointer-events: auto;
   cursor: pointer;
   border: none;
   font-weight: 800;
-  font-size: 20px;
+  font-size: clamp(14px, 3vmin, 20px);
   color: #173000;
-  padding: 16px 46px;
+  padding: clamp(10px, 2vh, 16px) clamp(28px, 6vw, 46px);
   border-radius: 40px;
   background: linear-gradient(180deg, #9be86a, #5fb22f);
   box-shadow: 0 6px 0 #3f7d1d, 0 10px 18px rgba(0, 0, 0, 0.4);
@@ -499,11 +514,11 @@ canvas {
 .overlay .hint-row {
   display: flex;
   flex-wrap: wrap;
-  gap: 12px 22px;
+  gap: 8px 16px;
   justify-content: center;
-  font-size: 13px;
+  font-size: clamp(10px, 1.8vmin, 13px);
   opacity: 0.9;
-  max-width: 560px;
+  max-width: min(560px, 92vw);
 }
 .overlay .hint-row span b {
   color: var(--accent);

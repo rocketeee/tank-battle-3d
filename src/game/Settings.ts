@@ -12,6 +12,8 @@ export interface SettingsData {
   gyroSens: number;
   /** Invert vertical (pitch) look from the gyroscope. On by default (feels natural tilt-to-look). */
   gyroInvertY: boolean;
+  /** Invert horizontal (yaw) look from the gyroscope. On by default (landscape natural). */
+  gyroInvertX: boolean;
   /** Invert vertical (pitch) look from the right-side drag/stick. */
   lookInvertY: boolean;
 }
@@ -27,6 +29,7 @@ const DEFAULTS: SettingsData = {
   gyroEnabled: false,
   gyroSens: 1,
   gyroInvertY: true,
+  gyroInvertX: true,
   lookInvertY: false,
 };
 const SENS_MIN = 0.4;
@@ -65,6 +68,7 @@ export class Settings {
     this.bindSlider('gyro', 'gyroSens');
     this.bindGyroToggle();
     this.bindInvertToggle('gyro-invert', 'gyroInvertY');
+    this.bindInvertToggle('gyro-invert-x', 'gyroInvertX');
     this.bindInvertToggle('look-invert', 'lookInvertY');
     this.syncUI();
   }
@@ -80,6 +84,7 @@ export class Settings {
         gyroEnabled: !!parsed.gyroEnabled,
         gyroSens: clampSens(parsed.gyroSens ?? DEFAULTS.gyroSens),
         gyroInvertY: parsed.gyroInvertY ?? DEFAULTS.gyroInvertY,
+        gyroInvertX: parsed.gyroInvertX ?? DEFAULTS.gyroInvertX,
         lookInvertY: parsed.lookInvertY ?? DEFAULTS.lookInvertY,
       };
     } catch {
@@ -133,7 +138,7 @@ export class Settings {
     });
   }
 
-  private bindInvertToggle(cls: string, field: 'gyroInvertY' | 'lookInvertY') {
+  private bindInvertToggle(cls: string, field: 'gyroInvertY' | 'gyroInvertX' | 'lookInvertY') {
     const toggle = this.panel.querySelector(`.${cls}`) as HTMLInputElement;
     toggle.addEventListener('change', () => {
       this.data[field] = toggle.checked;
@@ -169,6 +174,7 @@ export class Settings {
     set('gyro', 'gyroSens');
     (this.panel.querySelector('.gyro-toggle') as HTMLInputElement).checked = this.data.gyroEnabled;
     (this.panel.querySelector('.gyro-invert') as HTMLInputElement).checked = this.data.gyroInvertY;
+    (this.panel.querySelector('.gyro-invert-x') as HTMLInputElement).checked = this.data.gyroInvertX;
     (this.panel.querySelector('.look-invert') as HTMLInputElement).checked = this.data.lookInvertY;
     this.panel.classList.toggle('gyro-on', this.data.gyroEnabled);
   }
@@ -207,6 +213,12 @@ const TEMPLATE = `
         <label>陀螺仪上下反转</label>
         <div class="setting-ctl toggle-ctl">
           <label class="switch"><input type="checkbox" class="gyro-invert"><span class="slider-track"></span></label>
+        </div>
+      </div>
+      <div class="setting-row gyro-only">
+        <label>陀螺仪左右反转</label>
+        <div class="setting-ctl toggle-ctl">
+          <label class="switch"><input type="checkbox" class="gyro-invert-x"><span class="slider-track"></span></label>
         </div>
       </div>
       <p class="settings-hint">陀螺仪开启后，倾斜手机即可微调视角，可与右摇杆叠加使用。</p>

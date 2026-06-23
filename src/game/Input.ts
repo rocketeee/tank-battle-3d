@@ -92,8 +92,9 @@ export class Input {
     this.lookDelta.set(0, 0);
     if (s.lookInvertY) d.y = -d.y;
     if (s.gyroEnabled) {
+      const gx = s.gyroInvertX ? -this.gyroDelta.x : this.gyroDelta.x;
       const gy = s.gyroInvertY ? -this.gyroDelta.y : this.gyroDelta.y;
-      d.x += this.gyroDelta.x * s.gyroSens * GYRO_SCALE;
+      d.x += gx * s.gyroSens * GYRO_SCALE;
       d.y += gy * s.gyroSens * GYRO_SCALE;
     }
     this.gyroDelta.set(0, 0);

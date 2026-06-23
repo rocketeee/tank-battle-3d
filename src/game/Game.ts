@@ -149,18 +149,9 @@ export class Game {
     this.hud.hideCrosshair();
     this.hud.showOverlay(
       '萌坦大战 <span class="sub">ROGUELIKE</span>',
-      `驾驶萌系小坦克横扫<span class="tag">森林 · 沙漠 · 外星球</span>,击败每关 BOSS!<br/><br/>
-       <span class="hint-row">
-         <span><b>左侧摇杆</b> 移动(跟手浮动)</span>
-         <span><b>右侧拖动</b> 转动整个视角</span>
-         <span><b>💥 开炮</b> 准星射击(爆头暴击)</span>
-       </span>
-       <span class="hint-row" style="margin-top:8px">
-         <span><b>🛡️ 初始仅护盾</b></span>
-         <span><b>击杀小兵升级</b> → 弹出 3 张技能卡三选一</span>
-         <span><b>技能叠加协同</b> 火/冰/雷/标记 build</span>
-       </span><br/>
-       <span style="opacity:.8;font-size:13px">3 条命 · 阵亡后无敌闪烁 3 秒 · 右上角 ⚙ 可调灵敏度/陀螺仪 · 电脑端:WASD 移动 / 鼠标右拖转视角 / J 开炮 / 空格·1·2·3·4 技能</span>`,
+      `<span class="tag">森林 · 沙漠 · 外星球</span> — 三大战场，击败每关 BOSS!<br/>
+       <span class="hint-compact">🛡️ 初始仅护盾 → 击杀升级 → 三选一技能卡 → 火/冰/雷 build</span><br/>
+       <span class="hint-tiny">⚙ 右上角设置灵敏度/陀螺仪 · 电脑端 WASD / 鼠标右键 / J·空格·1234</span>`,
       '开始游戏',
     );
   }
