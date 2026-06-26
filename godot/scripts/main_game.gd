@@ -241,6 +241,8 @@ func _start_run() -> void:
 func _load_level(idx: int) -> void:
 	GameManager.level_index = idx
 	GameManager.wave_index = 0
+	GameManager.spawns_pending = false
+	wave_timer = 0.0
 	var config := levels[idx]
 	arena.build(config)
 
@@ -308,7 +310,6 @@ func _tick_playing(delta: float) -> void:
 		if GameManager.wave_index < config.waves.size():
 			GameManager.spawns_pending = true
 			wave_timer = 2.0
-			_schedule_wave_spawn()
 		elif boss == null:
 			_spawn_boss()
 		elif not boss.alive:
@@ -317,13 +318,13 @@ func _tick_playing(delta: float) -> void:
 			GameManager.level_cleared.emit(GameManager.level_index)
 			hud.show_toast("关卡通过!", 3.0)
 
-func _schedule_wave_spawn() -> void:
-	await get_tree().create_timer(2.0).timeout
-	if GameManager.state == GameManager.State.PLAYING:
-		_spawn_wave()
-	elif GameManager.state == GameManager.State.LEVELUP:
-		# Will be spawned after card select
-		pass
+	# Drive the inter-wave delay here instead of a one-shot timer so a level-up
+	# pausing PLAYING can never drop the pending wave (the countdown simply
+	# resumes when the player returns from card selection).
+	if GameManager.spawns_pending:
+		wave_timer -= delta
+		if wave_timer <= 0.0:
+			_spawn_wave()
 
 func _spawn_wave() -> void:
 	var config := levels[GameManager.level_index]
@@ -626,9 +627,6 @@ func _on_card_selected(card: Dictionary) -> void:
 		_on_leveled_up(run.leveling.level)
 	else:
 		GameManager.state = GameManager.State.PLAYING
-		# Fix: if spawns pending after levelup, trigger them now
-		if GameManager.spawns_pending and enemies.is_empty():
-			_spawn_wave()
 
 func _refresh_active_skills() -> void:
 	active_skills.clear()
