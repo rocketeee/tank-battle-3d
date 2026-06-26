@@ -14,8 +14,8 @@ static func register() -> void:
 		"max_level": 3,
 		"cast": func(api: Dictionary, lvl: int) -> void:
 			var pos: Vector3 = api.player_pos.call()
-			var radius := 6.0 * api.stats.area_mult
-			var dmg := api.stats.damage * (1.2 + lvl * 0.4)
+			var radius: float = 6.0 * api.stats.area_mult
+			var dmg: float = api.stats.damage * (1.2 + lvl * 0.4)
 			api.deal_aoe.call(pos, radius, dmg)
 			api.particles.call("emit_shockwave", pos, radius)
 			api.audio.call("play_explosion")
@@ -44,8 +44,8 @@ static func register() -> void:
 		"max_level": 3,
 		"cast": func(api: Dictionary, lvl: int) -> void:
 			var pos: Vector3 = api.player_pos.call()
-			var radius := 4.0 * api.stats.area_mult
-			var dmg := api.stats.damage * (0.4 + lvl * 0.15)
+			var radius: float = 4.0 * api.stats.area_mult
+			var dmg: float = api.stats.damage * (0.4 + lvl * 0.15)
 			api.deal_aoe.call(pos, radius, dmg)
 			api.particles.call("emit_whirlwind", pos, radius)
 	})
@@ -78,7 +78,7 @@ static func register() -> void:
 			# AoE along dash path
 			var pos: Vector3 = api.player_pos.call()
 			var yaw: float = api.cam_yaw
-			var dmg := api.stats.damage * (0.8 + lvl * 0.3)
+			var dmg: float = api.stats.damage * (0.8 + lvl * 0.3)
 			var dir := Vector3(sin(yaw), 0.0, cos(yaw))
 			for i in 3:
 				var p := pos + dir * (float(i) * 3.0)

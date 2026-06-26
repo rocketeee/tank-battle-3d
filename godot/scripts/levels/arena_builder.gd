@@ -21,6 +21,15 @@ func build(config: LevelConfig) -> void:
 	_build_props(config)
 	_build_sun(config)
 
+func _build_sun(config: LevelConfig) -> void:
+	_sun = DirectionalLight3D.new()
+	_sun.light_color = config.sun_color
+	_sun.light_energy = config.sun_intensity
+	_sun.rotation_degrees = Vector3(-55.0, -35.0, 0.0)
+	_sun.shadow_enabled = true
+	_sun.directional_shadow_mode = DirectionalLight3D.SHADOW_PARALLEL_4_SPLITS
+	add_child(_sun)
+
 func _build_environment(config: LevelConfig) -> void:
 	_env_node = WorldEnvironment.new()
 	var env := Environment.new()

@@ -228,16 +228,14 @@ func sync_skill_buttons(owned_skills: Array[String]) -> void:
 			if def.is_empty():
 				continue
 			var icon: String = def.get("icon", "?")
-			var color := Color(0.5, 0.5, 0.5)
-			match true:
-				def.get("id", "").contains("fire") or def.get("id", "").contains("flame"):
-					color = Color(1, 0.4, 0.1)
-				def.get("id", "").contains("ice") or def.get("id", "").contains("frost"):
-					color = Color(0.3, 0.7, 1.0)
-				def.get("id", "").contains("lightning") or def.get("id", "").contains("chain") or def.get("id", "").contains("divine"):
-					color = Color(0.9, 0.9, 0.2)
-				_:
-					color = Color(0.6, 0.6, 0.6)
+			var color := Color(0.6, 0.6, 0.6)
+			var def_id: String = def.get("id", "")
+			if def_id.contains("fire") or def_id.contains("flame"):
+				color = Color(1, 0.4, 0.1)
+			elif def_id.contains("ice") or def_id.contains("frost"):
+				color = Color(0.3, 0.7, 1.0)
+			elif def_id.contains("lightning") or def_id.contains("chain") or def_id.contains("divine"):
+				color = Color(0.9, 0.9, 0.2)
 			var btn := _create_skill_button(skill_id, icon, color)
 			skill_container.add_child(btn)
 

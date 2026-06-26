@@ -15,7 +15,7 @@ static func register() -> void:
 		"cast": func(api: Dictionary, lvl: int) -> void:
 			var pos: Vector3 = api.player_pos.call()
 			var targets: Array = api.nearest.call(pos, 2 + lvl, 20.0)
-			var dmg := api.stats.damage * 0.35
+			var dmg: float = api.stats.damage * 0.35
 			for t: Dictionary in targets:
 				var tpos: Vector3 = t.position
 				var dir := (tpos - pos).normalized()
@@ -54,7 +54,7 @@ static func register() -> void:
 		"cast": func(api: Dictionary, lvl: int) -> void:
 			var pos: Vector3 = api.player_pos.call()
 			var count := 6 + lvl * 2
-			var dmg := api.stats.damage * 0.25
+			var dmg: float = api.stats.damage * 0.25
 			for i in count:
 				var angle := randf() * TAU
 				var dir := Vector3(sin(angle), randf() * 0.2 - 0.1, cos(angle)).normalized()
@@ -92,9 +92,9 @@ static func register() -> void:
 		"max_level": 3,
 		"cast": func(api: Dictionary, lvl: int) -> void:
 			var center: Vector3 = api.ground_aim.call()
-			var radius := 8.0 * api.stats.area_mult
+			var radius: float = 8.0 * api.stats.area_mult
 			var count := 6 + lvl * 3
-			var dmg := api.stats.damage * (0.6 + lvl * 0.2)
+			var dmg: float = api.stats.damage * (0.6 + lvl * 0.2)
 			for _i in count:
 				var offset := Vector3(randf_range(-radius, radius), 0, randf_range(-radius, radius))
 				var target_pos := center + offset

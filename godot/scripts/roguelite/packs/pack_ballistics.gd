@@ -16,7 +16,7 @@ static func register() -> void:
 			var pos: Vector3 = api.player_pos.call()
 			var aim: Vector3 = api.ground_aim.call()
 			var dir := (aim - pos).normalized()
-			var dmg := api.stats.damage * (3.0 + lvl * 1.0)
+			var dmg: float = api.stats.damage * (3.0 + lvl * 1.0)
 			api.spawn_bullet.call({
 				"pos": pos + Vector3.UP * 1.2,
 				"dir": dir,
@@ -56,7 +56,7 @@ static func register() -> void:
 			var aim: Vector3 = api.ground_aim.call()
 			var base_dir := (aim - pos).normalized()
 			var count := 8 + lvl * 4
-			var dmg := api.stats.damage * 0.3
+			var dmg: float = api.stats.damage * 0.3
 			for i in count:
 				var spread := (randf() - 0.5) * 0.3
 				var up_spread := (randf() - 0.5) * 0.15
@@ -96,7 +96,7 @@ static func register() -> void:
 		"cast": func(api: Dictionary, lvl: int) -> void:
 			var pos: Vector3 = api.player_pos.call()
 			var count := 3 + lvl
-			var dmg := api.stats.damage * 0.5
+			var dmg: float = api.stats.damage * 0.5
 			for i in count:
 				var angle := float(i) / float(count) * TAU
 				var dir := Vector3(sin(angle), 0.1, cos(angle)).normalized()

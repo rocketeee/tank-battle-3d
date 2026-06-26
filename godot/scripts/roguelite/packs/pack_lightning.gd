@@ -18,7 +18,7 @@ static func register() -> void:
 			if targets.is_empty():
 				return
 			var bounces := 3 + lvl
-			var dmg := api.stats.damage * 0.5
+			var dmg: float = api.stats.damage * 0.5
 			var hit: Array[Dictionary] = []
 			var current: Dictionary = targets[0]
 			for _b in bounces:

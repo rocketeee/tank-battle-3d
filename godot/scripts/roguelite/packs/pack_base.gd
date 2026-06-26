@@ -83,8 +83,8 @@ static func register() -> void:
 		"cast": func(api: Dictionary, lvl: int) -> void:
 			api.player.call("jump")
 			var pos: Vector3 = api.player_pos.call()
-			var radius := 5.0 * api.stats.area_mult
-			var dmg := api.stats.damage * (1.0 + lvl * 0.3)
+			var radius: float = 5.0 * api.stats.area_mult
+			var dmg: float = api.stats.damage * (1.0 + lvl * 0.3)
 			# Delayed AoE after landing
 			api.deal_aoe.call(pos, radius, dmg)
 			api.particles.call("emit_explosion", pos, radius, Color(0.8, 0.5, 0.2))
@@ -142,7 +142,7 @@ static func register() -> void:
 		"max_level": 3,
 		"cast": func(api: Dictionary, lvl: int) -> void:
 			var targets: Array = api.nearest.call(api.player_pos.call(), 3 + lvl, 18.0)
-			var dmg := api.stats.damage * (1.5 + lvl * 0.5)
+			var dmg: float = api.stats.damage * (1.5 + lvl * 0.5)
 			for t: Dictionary in targets:
 				api.deal_damage.call(t, dmg, {"force_crit": lvl >= 3})
 				var tpos: Vector3 = t.position

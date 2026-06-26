@@ -78,7 +78,7 @@ static func register() -> void:
 		"max_level": 2,
 		"cast": func(api: Dictionary, lvl: int) -> void:
 			var pos: Vector3 = api.player_pos.call()
-			var radius := 12.0 * api.stats.area_mult
+			var radius: float = 12.0 * api.stats.area_mult
 			var targets: Array = api.nearest.call(pos, 20, radius)
 			for t: Dictionary in targets:
 				api.apply_status.call(t, {

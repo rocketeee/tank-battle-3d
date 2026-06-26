@@ -17,7 +17,7 @@ static func register() -> void:
 			var yaw: float = api.cam_yaw
 			var dir := Vector3(sin(yaw), 0.0, cos(yaw))
 			var range_val := 8.0 + lvl * 2.0
-			var dmg := api.stats.damage * 0.4 * api.stats.burn_amp
+			var dmg: float = api.stats.damage * 0.4 * api.stats.burn_amp
 			var targets: Array = api.nearest.call(pos, 5, range_val)
 			for t: Dictionary in targets:
 				api.deal_damage.call(t, dmg)
