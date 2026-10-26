@@ -18,7 +18,7 @@
 
 ## 隐私政策 URL
 
-目标地址（Pages 打开之后）：
+目标地址（已发布，HTTP 200）：
 
 `https://rocketeee.github.io/tank-battle-3d/privacy.html`
 
@@ -44,13 +44,9 @@
 gh workflow run pages.yml --ref cursor/mobile-play-wave1-6414
 ```
 
-仓库是公开的。部署成功后打开上面的 URL，应能看到中英政策和 `rocketeee@gmail.com`。Play Console 的隐私政策栏粘贴同一 URL。不要把本 PR 合并进 `main` 才算发布。
+仓库是公开的。这个 URL 已经返回 HTTP 200，页面里有中英政策和 `rocketeee@gmail.com`。Play Console 的隐私政策栏粘贴同一 URL。不要把本 PR 合并进 `main` 才算发布。
 
-当前还差一次人工开关。2026-10-26 用本分支推送已经跑过 `pages`：`actions/upload-pages-artifact` 成功，`actions/deploy-pages` 失败，日志是 `Failed to create deployment (status: 404) ... Ensure GitHub Pages has been enabled`（run `40281391709`）。用 API 打开 Pages 也被拒：
-
-`POST /repos/rocketeee/tank-battle-3d/pages` → **403** `Resource not accessible by integration`。响应头 `X-Accepted-Github-Permissions: pages=write,administration=write`。这个云端令牌没有仓库管理权限，不能替你改 Settings。
-
-你在 GitHub 打开 **Settings → Pages → Build and deployment → Source → GitHub Actions**，保存后再跑一次上面的 `gh workflow run`。不用合并 `main`。
+成功的部署是 Actions run `40283789642`（2026-10-26，分支 `cursor/mobile-play-wave1-6414`）。`github-pages` 环境的部署分支里需要有这个分支；只有 `main` 时，从本分支发布会被环境规则拒绝。`gh workflow run` 在当前云端令牌上仍是 403（`actions=write`），推送该分支会重新跑 `pages.yml`。
 
 ## 短说明（80 字以内）
 
@@ -176,4 +172,4 @@ JDK 17 或 21 都可以。`ANDROID_HOME` 指向已安装的 platform 34 和 buil
 - 空的环境变量样例：`.env.example`。即使填了 `VITE_ADMOB_APP_ID`，这一版也会继续走模拟，因为适配器还没写。
 - 商品 id：`remove_ads`、`skin_berry`。没有伤害类商品，也没有金币礼包。金币只从对局结算来，整备满级后不再加战斗力。
 
-接真 SDK 之前还要做完：确认 Pages 上的隐私 URL 能打开、数据安全表按 SDK 披露改写、IARC、单独的上传密钥。联系邮箱已经是 rocketeee@gmail.com。这些都还要开发者点头，本仓库不代提交，也不上传 AAB。
+接真 SDK 之前还要做完：数据安全表按 SDK 披露改写、IARC、单独的上传密钥。隐私 URL 已经能打开，联系邮箱是 rocketeee@gmail.com。这些都还要开发者点头，本仓库不代提交，也不上传 AAB。
