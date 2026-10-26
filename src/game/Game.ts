@@ -16,7 +16,7 @@ import { MetaSave, loadMeta, saveMeta, skinById, ownsSkin, syncUnlocks, stubRemo
 import { WaveSpec, specForWave, ArenaTheme } from './waves';
 import { applyUpgrade, rankOf, rollChoices, emptyMods } from './upgrades';
 import { canOfferRevive, canRefreshChoices, shouldShowInterstitial } from './ads';
-import { shareResult } from './share';
+import { formatShareText, shareResult } from './share';
 
 type State = 'menu' | 'playing' | 'upgrade' | 'revive' | 'mockad' | 'settle';
 type AdMode = 'revive' | 'refresh' | 'interstitial';
@@ -63,6 +63,7 @@ export class Game {
   private breather = 0;
   private reviveUsed = false;
   private refreshUsed = false;
+  private offered: string[] = [];
   private runSerial = 0;
   private adMode: AdMode | null = null;
   private pendingSettle: SettleInfo | null = null;
@@ -98,7 +99,7 @@ export class Game {
     root.appendChild(this.renderer.domElement);
 
     this.scene = new THREE.Scene();
-    this.camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 220);
+    this.camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 320);
     this.camera.position.set(0, 12, 14);
 
     this.particles = new Particles(this.scene, quality.fx);
@@ -241,7 +242,7 @@ export class Game {
       pressure: spec.pressure,
       dmg: spec.dmgScale,
     });
-    this.boss.spawnAt(new THREE.Vector3(0, 0, -PLAY_BOUNDS * 0.72));
+    this.boss.spawnAt(new THREE.Vector3(0, 0, -PLAY_BOUNDS * 0.58));
     this.hud.showBoss(this.boss.name);
     this.hud.updateBoss(this.boss.hp, this.boss.hpMax);
     this.audio.bossWarn();
@@ -249,9 +250,10 @@ export class Game {
 
   private spawnEnemy(kind: 'alien' | 'ufo', spec: WaveSpec) {
     const e = new Enemy(this.scene, kind, spec.hpScale, Math.floor(rand(0, 3)), spec.dmgScale, spec.speedScale);
-    // Opening camera looks toward -Z. Wave 1 stands in that view.
+    // Opening camera looks toward -Z. Wave 1 stays close so the bigger field
+    // does not hide the first targets.
     const a = spec.wave === 1 ? -Math.PI / 2 + rand(-0.35, 0.35) : rand(0, Math.PI * 2);
-    const r = spec.wave === 1 ? rand(9, 14) : rand(PLAY_BOUNDS * 0.55, PLAY_BOUNDS - 1.2);
+    const r = spec.wave === 1 ? rand(11, 16) : rand(PLAY_BOUNDS * 0.34, PLAY_BOUNDS - 3);
     e.spawnAt(new THREE.Vector3(Math.cos(a) * r, 0, Math.sin(a) * r));
     if (spec.wave === 1) e.arm(1.35);
     this.enemies.push(e);
@@ -260,7 +262,9 @@ export class Game {
   private openUpgrade() {
     if (this.state !== 'playing') return;
     this.bullets.clear();
-    const cards = rollChoices(this.player.mods, 3).map((def) => this.toCard(def.id, def.name, def.blurb, def.max));
+    const defs = rollChoices(this.player.mods, 3);
+    this.offered = defs.map((def) => def.id);
+    const cards = defs.map((def) => this.toCard(def.id, def.name, def.blurb, def.max));
     if (cards.length === 0) {
       this.wave += 1;
       this.beginWave();
@@ -303,7 +307,7 @@ export class Game {
   private playAd(mode: AdMode, label: string) {
     this.state = 'mockad';
     this.adMode = mode;
-    this.hud.showAd(label, () => this.finishAd());
+    this.hud.showAd(label, mode, () => this.finishAd());
   }
 
   private finishAd() {
@@ -321,7 +325,9 @@ export class Game {
       return;
     }
     if (mode === 'refresh') {
-      const cards = rollChoices(this.player.mods, 3).map((def) => this.toCard(def.id, def.name, def.blurb, def.max));
+      const defs = rollChoices(this.player.mods, 3, Math.random, this.offered);
+      this.offered = defs.map((def) => def.id);
+      const cards = defs.map((def) => this.toCard(def.id, def.name, def.blurb, def.max));
       this.state = 'upgrade';
       if (cards.length === 0) {
         this.wave += 1;
@@ -380,14 +386,17 @@ export class Game {
   }
 
   private async shareSettle() {
-    if (!this.pendingSettle) return;
-    const mode = await shareResult({
+    if (!this.pendingSettle || this.state !== 'settle') return;
+    const info = {
       wave: this.pendingSettle.wave,
       kills: this.pendingSettle.kills,
       time: this.pendingSettle.time,
       name: DISPLAY_NAME,
-    });
-    this.hud.toast(mode === 'shared' ? '已分享' : mode === 'downloaded' ? '已保存战绩图' : '已复制文字');
+    };
+    const text = formatShareText(info);
+    const mode = await shareResult(info);
+    this.hud.setShareLine(text);
+    this.hud.toast(mode === 'shared' ? '已打开分享' : mode === 'downloaded' ? '已保存战绩图并复制文字' : '已复制战绩');
   }
 
   private setSensitivity(s: Sensitivity) {
@@ -411,9 +420,14 @@ export class Game {
 
   private applyStub(kind: 'ads' | 'skin') {
     if (kind === 'ads') {
+      if (this.meta.removeAds) {
+        this.hud.toast('插屏已经关掉了');
+        return;
+      }
       stubRemoveAds(this.meta);
       saveMeta(this.meta);
-      this.hud.toast('占位：已关闭插屏，火力不变');
+      if (this.state === 'menu') this.hud.renderMenu(this.meta, this.settings.sensitivity);
+      this.hud.toast('模拟支付完成：插屏已关闭，火力不变');
       return;
     }
     stubUnlockSkin(this.meta, 'berry');
@@ -626,10 +640,10 @@ export class Game {
     const cp = Math.cos(this.camPitch);
     const sp = Math.sin(this.camPitch);
     const tgt = this.player.worldPos();
-    const dist = 8.4;
+    const dist = 10.8;
     const camX = tgt.x - this.camForward.x * dist * cp;
     const camZ = tgt.z - this.camForward.z * dist * cp;
-    const camY = tgt.y + 3.6 - sp * 3.4;
+    const camY = tgt.y + 4.6 - sp * 4.0;
     this.camera.position.x = damp(this.camera.position.x, camX, 10, dt);
     this.camera.position.y = damp(this.camera.position.y, camY, 10, dt);
     this.camera.position.z = damp(this.camera.position.z, camZ, 10, dt);
@@ -664,8 +678,8 @@ export class Game {
     if (found) return this.aimBest;
 
     const hit = new THREE.Vector3();
-    if (ray.intersectPlane(this.groundPlane, hit) && hit.distanceTo(ray.origin) < 90) return hit;
-    return ray.origin.clone().addScaledVector(ray.direction, 45);
+    if (ray.intersectPlane(this.groundPlane, hit) && hit.distanceTo(ray.origin) < 170) return hit;
+    return ray.origin.clone().addScaledVector(ray.direction, 70);
   }
 
   private castOrbital() {

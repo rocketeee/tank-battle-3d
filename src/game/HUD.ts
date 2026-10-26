@@ -74,6 +74,8 @@ export class HUD {
   private settle: HTMLElement;
   private settleStats: HTMLElement;
   private bestLine: HTMLElement;
+  private shareLine: HTMLElement;
+  private adsBtn: HTMLButtonElement;
   private skinRow: HTMLElement;
   private sensBtns: HTMLButtonElement[];
   private adTimer = 0;
@@ -124,6 +126,8 @@ export class HUD {
     this.adKind = root.querySelector('.ad-kind')!;
     this.settle = root.querySelector('.settle-panel')!;
     this.settleStats = root.querySelector('.settle-stats')!;
+    this.shareLine = root.querySelector('.share-result')!;
+    this.adsBtn = root.querySelector('[data-stub="ads"]')!;
     this.bestLine = root.querySelector('.bestline')!;
     this.skinRow = root.querySelector('.skins')!;
     this.sensBtns = Array.from(root.querySelectorAll('.sens button')) as HTMLButtonElement[];
@@ -156,6 +160,8 @@ export class HUD {
     const best = meta.bestWave > 0 ? `最佳 第 ${meta.bestWave} 波 · 击杀 ${meta.bestKills}` : '还没有纪录，第一波很温柔';
     this.bestLine.textContent = best;
     for (const btn of this.sensBtns) btn.classList.toggle('active', btn.dataset.sens === sensitivity);
+    this.adsBtn.disabled = meta.removeAds;
+    this.adsBtn.textContent = meta.removeAds ? '插屏已关闭（模拟支付）' : '去除广告（未接入支付）';
     this.skinRow.innerHTML = '';
     for (const skin of SKINS) {
       const owned = ownsSkin(meta, skin.id);
@@ -175,6 +181,7 @@ export class HUD {
     for (const card of cards) {
       const b = document.createElement('button');
       b.className = 'card';
+      b.dataset.id = card.id;
       b.innerHTML = `<b>${card.name}</b><span class="lv">Lv.${card.rank + 1}/${card.max}</span><span>${card.blurb}</span>`;
       b.addEventListener('click', () => this.onPick?.(card.id));
       this.cardsEl.appendChild(b);
@@ -194,12 +201,21 @@ export class HUD {
     this.showOnly('settle');
   }
 
-  showAd(label: string, onDone: () => void) {
+  showAd(label: string, mode: string, onDone: () => void) {
     this.adKind.textContent = label;
+    this.ad.dataset.mode = mode;
     this.adDone = onDone;
     window.clearTimeout(this.adTimer);
+    this.menu.classList.add('hidden');
+    this.upgrade.classList.add('hidden');
+    this.revive.classList.add('hidden');
+    this.settle.classList.add('hidden');
     this.ad.classList.remove('hidden');
-    this.adTimer = window.setTimeout(() => this.finishAd(), 1300);
+    this.adTimer = window.setTimeout(() => this.finishAd(), 1600);
+  }
+
+  setShareLine(text: string) {
+    this.shareLine.textContent = text;
   }
 
   hideAd() {
@@ -224,7 +240,7 @@ export class HUD {
     this.upgrade.classList.toggle('hidden', which !== 'upgrade');
     this.revive.classList.toggle('hidden', which !== 'revive');
     this.settle.classList.toggle('hidden', which !== 'settle');
-    if (which !== null) this.hideAd();
+    this.hideAd();
   }
 
   setPlaying(on: boolean) {
@@ -413,6 +429,7 @@ const TEMPLATE = `
     <button class="bigbtn retry" type="button">再来一局</button>
     <div class="stubs">
       <button class="textbtn share" type="button">分享战绩</button>
+      <p class="share-result"></p>
       <button class="textbtn home" type="button">主页</button>
     </div>
   </div>

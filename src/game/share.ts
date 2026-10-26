@@ -47,36 +47,82 @@ function drawCard(info: ShareInfo): HTMLCanvasElement {
   return canvas;
 }
 
-/** Share sheet when the browser allows files, otherwise download the card and copy the text. */
-export async function shareResult(info: ShareInfo): Promise<'shared' | 'downloaded' | 'copied'> {
-  const text = formatShareText(info);
-  const canvas = drawCard(info);
-  const blob = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, 'image/png'));
-  if (!blob) {
-    await navigator.clipboard?.writeText(text).catch(() => undefined);
-    return 'copied';
+interface CapSharePlugin {
+  share(options: { title?: string; text?: string; dialogTitle?: string }): Promise<unknown>;
+}
+
+/** Native sheet only when Capacitor and the Share plugin are both on the page. */
+function capacitorShare(): CapSharePlugin | null {
+  const cap = (window as Window & {
+    Capacitor?: { isNativePlatform?: () => boolean; Plugins?: { Share?: CapSharePlugin } };
+  }).Capacitor;
+  if (!cap?.isNativePlatform?.()) return null;
+  return cap.Plugins?.Share ?? null;
+}
+
+async function copyText(text: string): Promise<boolean> {
+  const write = navigator.clipboard?.writeText?.bind(navigator.clipboard);
+  if (!write) return false;
+  try {
+    await Promise.race([
+      write(text),
+      new Promise<never>((_, reject) => window.setTimeout(() => reject(new Error('clipboard-timeout')), 500)),
+    ]);
+    return true;
+  } catch {
+    return false;
   }
-  const file = new File([blob], 'mengtan-dazhan.png', { type: 'image/png' });
-  const nav = navigator as Navigator & { canShare?: (data: ShareData) => boolean };
-  if (typeof nav.share === 'function') {
-    const payload: ShareData = { title: info.name, text, files: [file] };
-    const allowed = !nav.canShare || nav.canShare(payload) || nav.canShare({ title: info.name, text });
-    if (allowed) {
-      try {
-        if (nav.canShare && !nav.canShare(payload)) await nav.share({ title: info.name, text });
-        else await nav.share(payload);
-        return 'shared';
-      } catch (err) {
-        if ((err as Error).name === 'AbortError') return 'copied';
-      }
-    }
-  }
+}
+
+function downloadBlob(blob: Blob) {
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = url;
   a.download = 'mengtan-dazhan.png';
   a.click();
   URL.revokeObjectURL(url);
-  await navigator.clipboard?.writeText(text).catch(() => undefined);
-  return 'downloaded';
+}
+
+/**
+ * Opens the Capacitor share sheet when that plugin is installed, otherwise the
+ * Web Share sheet. If neither is available, downloads the card and copies the text.
+ * Clipboard copy runs beside the sheet so a slow or blocked clipboard cannot skip sharing.
+ */
+export async function shareResult(info: ShareInfo): Promise<'shared' | 'downloaded' | 'copied'> {
+  const text = formatShareText(info);
+  const canvas = drawCard(info);
+  const blob = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, 'image/png'));
+  void copyText(text);
+
+  const native = capacitorShare();
+  if (native) {
+    try {
+      await native.share({ title: info.name, text, dialogTitle: info.name });
+      return 'shared';
+    } catch (err) {
+      if ((err as Error).name === 'AbortError') return 'copied';
+    }
+  }
+
+  const nav = navigator as Navigator & { canShare?: (data: ShareData) => boolean };
+  if (blob && typeof nav.share === 'function') {
+    const file = new File([blob], 'mengtan-dazhan.png', { type: 'image/png' });
+    const withFile: ShareData = { title: info.name, text, files: [file] };
+    const textOnly: ShareData = { title: info.name, text };
+    const payload = nav.canShare && !nav.canShare(withFile) ? textOnly : withFile;
+    if (!nav.canShare || nav.canShare(payload)) {
+      try {
+        await nav.share(payload);
+        return 'shared';
+      } catch (err) {
+        if ((err as Error).name === 'AbortError') return 'copied';
+      }
+    }
+  }
+
+  if (blob) {
+    downloadBlob(blob);
+    return 'downloaded';
+  }
+  return 'copied';
 }

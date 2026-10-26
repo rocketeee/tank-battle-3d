@@ -1,7 +1,8 @@
 import { canOfferRevive, canRefreshChoices, shouldShowInterstitial } from '../src/game/ads.ts';
-import { cosmeticPower, defaultMeta, SKINS, stubUnlockSkin } from '../src/game/meta.ts';
+import { ARENA_RADIUS, PLAY_BOUNDS } from '../src/game/arena.ts';
+import { cosmeticPower, defaultMeta, SKINS, stubRemoveAds, stubUnlockSkin } from '../src/game/meta.ts';
 import { formatShareText } from '../src/game/share.ts';
-import { applyUpgrade, emptyMods, UPGRADES } from '../src/game/upgrades.ts';
+import { applyUpgrade, emptyMods, rollChoices, UPGRADES } from '../src/game/upgrades.ts';
 import { specForWave } from '../src/game/waves.ts';
 
 let failed = 0;
@@ -19,7 +20,11 @@ check('difficulty ramps by wave 8', w8.dmgScale > w1.dmgScale * 1.5 && w8.aliens
 check('wave 5 is a boss, not a campaign ending', specForWave(5).boss && specForWave(6).aliens > 0);
 check('wave 100 still exists', specForWave(100).wave === 100 && specForWave(100).aliens > 0);
 
+check('arena is at least 1.5× the original 27 clamp', PLAY_BOUNDS >= 27 * 1.5 && ARENA_RADIUS >= PLAY_BOUNDS);
 check('upgrade pool has at least 6', UPGRADES.length >= 6);
+const offer = rollChoices(emptyMods(), 3);
+const reroll = rollChoices(emptyMods(), 3, Math.random, offer.map((u) => u.id));
+check('reroll replaces the cards just shown', offer.length === 3 && reroll.length === 3 && reroll.every((u) => !offer.some((o) => o.id === u.id)));
 const mods = emptyMods();
 const before = mods.dmg;
 check('power upgrade changes run damage only', applyUpgrade(mods, 'power') && mods.dmg > before);
@@ -30,6 +35,8 @@ check('skins are paint ids, not stat blocks', SKINS.every((s) => typeof s.body =
 const meta = defaultMeta();
 stubUnlockSkin(meta, 'berry');
 check('stub skin unlock does not invent a damage field', cosmeticPower() === 0 && meta.skin === 'berry');
+stubRemoveAds(meta);
+check('remove-ads is a flag, not a damage stat', meta.removeAds && cosmeticPower() === 0);
 
 check('revive offered once', canOfferRevive(false) && !canOfferRevive(true));
 check('refresh offered once', canRefreshChoices(false) && !canRefreshChoices(true));

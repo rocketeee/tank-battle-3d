@@ -1,7 +1,10 @@
 import * as THREE from 'three';
+import { ARENA_RADIUS, PLAY_BOUNDS } from './arena';
 import { makeProp } from './AssetFactory';
 import { detectQuality } from './quality';
 import { rand } from './util';
+
+export { ARENA_RADIUS, PLAY_BOUNDS };
 
 export interface WaveDef {
   aliens: number;
@@ -43,7 +46,7 @@ export const LEVELS: LevelConfig[] = [
     sun: 0xfff4d6,
     sunIntensity: 1.5,
     ambientIntensity: 0.75,
-    propCount: 46,
+    propCount: 52,
     hpScale: 1,
     waves: [
       { aliens: 4, ufos: 1 },
@@ -65,7 +68,7 @@ export const LEVELS: LevelConfig[] = [
     sun: 0xfff0c0,
     sunIntensity: 1.7,
     ambientIntensity: 0.8,
-    propCount: 40,
+    propCount: 46,
     hpScale: 1.3,
     waves: [
       { aliens: 5, ufos: 2 },
@@ -87,7 +90,7 @@ export const LEVELS: LevelConfig[] = [
     sun: 0xd9b8ff,
     sunIntensity: 1.3,
     ambientIntensity: 0.9,
-    propCount: 44,
+    propCount: 50,
     hpScale: 1.7,
     waves: [
       { aliens: 6, ufos: 3 },
@@ -96,9 +99,6 @@ export const LEVELS: LevelConfig[] = [
     ],
   },
 ];
-
-export const ARENA_RADIUS = 30;
-export const PLAY_BOUNDS = 27;
 
 export function themeConfig(theme: LevelConfig['theme']): LevelConfig {
   return LEVELS.find((level) => level.theme === theme) ?? LEVELS[0];
@@ -132,12 +132,12 @@ export function buildEnvironment(scene: THREE.Scene, cfg: LevelConfig): Environm
 
   // sky + fog
   scene.background = skyTexture(cfg.skyTop, cfg.skyBottom);
-  scene.fog = new THREE.Fog(cfg.fog, 38, 88);
+  scene.fog = new THREE.Fog(cfg.fog, 64, 168);
 
   // outer ground (darker apron) + raised arena disc (brighter)
   const apronSeg = quality.tier === 'low' ? 28 : 48;
   const apron = new THREE.Mesh(
-    new THREE.CircleGeometry(ARENA_RADIUS + 24, apronSeg),
+    new THREE.CircleGeometry(ARENA_RADIUS + 36, apronSeg),
     new THREE.MeshStandardMaterial({ color: cfg.ground2, roughness: 1 }),
   );
   apron.rotation.x = -Math.PI / 2;
@@ -174,6 +174,8 @@ export function buildEnvironment(scene: THREE.Scene, cfg: LevelConfig): Environm
   // ground detail: flowers (forest) / pebbles, scattered inside the arena
   scatterGroundDetail(group, cfg);
 
+  scatterCoverRing(group, cfg);
+
   // scattered props (mostly outside play bounds, some inside as cover)
   const propCount = Math.max(8, Math.round(cfg.propCount * quality.propScale));
   for (let i = 0; i < propCount; i++) {
@@ -200,9 +202,9 @@ export function buildEnvironment(scene: THREE.Scene, cfg: LevelConfig): Environm
   sun.castShadow = quality.shadows;
   sun.shadow.mapSize.set(quality.shadowMap, quality.shadowMap);
   sun.shadow.camera.near = 1;
-  sun.shadow.camera.far = 90;
+  sun.shadow.camera.far = 180;
   sun.shadow.radius = 1;
-  const d = 40;
+  const d = PLAY_BOUNDS + 8;
   sun.shadow.camera.left = -d;
   sun.shadow.camera.right = d;
   sun.shadow.camera.top = d;
@@ -234,6 +236,25 @@ export function buildEnvironment(scene: THREE.Scene, cfg: LevelConfig): Environm
   };
 }
 
+/** A loose ring of cover so the bigger field still has landmarks to drive between. */
+function scatterCoverRing(group: THREE.Group, cfg: LevelConfig): void {
+  const tier = detectQuality().tier;
+  const rings = tier === 'low' ? 1 : 2;
+  const count = tier === 'low' ? 8 : 12;
+  for (let ring = 0; ring < rings; ring++) {
+    const radius = PLAY_BOUNDS * (ring === 0 ? 0.46 : 0.74);
+    for (let i = 0; i < count; i++) {
+      const a = (i / count) * Math.PI * 2 + ring * 0.37;
+      const prop = makeProp(cfg.theme, i + ring * 3);
+      const jitter = rand(-1.6, 1.6);
+      prop.position.set(Math.cos(a) * (radius + jitter), 0, Math.sin(a) * (radius + jitter));
+      prop.rotation.y = a + rand(-0.4, 0.4);
+      prop.scale.setScalar(rand(0.9, 1.3));
+      group.add(prop);
+    }
+  }
+}
+
 const FLOWER_COLORS = [0xff6f91, 0xffd54a, 0xffffff, 0xff9bb0, 0xb06bff];
 
 /** Scatter small flowers (forest) or pebbles (desert/alien) across the arena floor. */
@@ -241,7 +262,7 @@ function scatterGroundDetail(group: THREE.Group, cfg: LevelConfig): void {
   const detail = detectQuality().detailScale;
   if (cfg.theme === 'forest') {
     const stemMat = new THREE.MeshStandardMaterial({ color: 0x3f9a45, roughness: 0.9 });
-    const flowers = Math.max(8, Math.round(70 * detail));
+    const flowers = Math.max(10, Math.round(110 * detail));
     for (let i = 0; i < flowers; i++) {
       const a = rand(0, Math.PI * 2);
       const r = rand(3, ARENA_RADIUS - 1.5);
@@ -264,7 +285,7 @@ function scatterGroundDetail(group: THREE.Group, cfg: LevelConfig): void {
     }
   } else {
     const pebbleCol = cfg.theme === 'desert' ? 0xb89a5e : 0x5a4880;
-    const pebbles = Math.max(6, Math.round(45 * detail));
+    const pebbles = Math.max(8, Math.round(70 * detail));
     for (let i = 0; i < pebbles; i++) {
       const a = rand(0, Math.PI * 2);
       const r = rand(3, ARENA_RADIUS - 1.5);
@@ -288,7 +309,7 @@ function scatterSkyline(group: THREE.Group, cfg: LevelConfig): void {
       new THREE.SphereGeometry(7, 24, 16),
       new THREE.MeshStandardMaterial({ color: 0x8a5bd0, emissive: 0x3a1f6a, emissiveIntensity: 0.4, roughness: 0.8 }),
     );
-    planet.position.set(-34, 30, -46);
+    planet.position.set(-ARENA_RADIUS * 1.15, 36, -ARENA_RADIUS * 1.4);
     group.add(planet);
     const ringG = new THREE.Mesh(
       new THREE.TorusGeometry(10, 0.6, 8, 40),
@@ -303,7 +324,7 @@ function scatterSkyline(group: THREE.Group, cfg: LevelConfig): void {
         new THREE.DodecahedronGeometry(rand(0.8, 2), 0),
         new THREE.MeshStandardMaterial({ color: 0x4a3a6a, roughness: 0.9 }),
       );
-      rock.position.set(Math.cos(a) * rand(30, 46), rand(8, 22), Math.sin(a) * rand(30, 46));
+      rock.position.set(Math.cos(a) * rand(ARENA_RADIUS * 0.72, ARENA_RADIUS * 1.25), rand(10, 26), Math.sin(a) * rand(ARENA_RADIUS * 0.72, ARENA_RADIUS * 1.25));
       group.add(rock);
     }
   } else {
@@ -312,7 +333,7 @@ function scatterSkyline(group: THREE.Group, cfg: LevelConfig): void {
     const cloudCount = 7;
     for (let i = 0; i < cloudCount; i++) {
       const a = (i / cloudCount) * Math.PI * 2 + rand(-0.3, 0.3);
-      const r = rand(40, 52);
+      const r = rand(ARENA_RADIUS * 0.78, ARENA_RADIUS * 1.15);
       const cloud = new THREE.Group();
       const lobes = 3 + Math.floor(Math.random() * 3);
       for (let j = 0; j < lobes; j++) {

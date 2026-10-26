@@ -1,6 +1,6 @@
 # 萌坦大战 · Tank Battle 3D
 
-无尽波次的 Q 版 3D 坦克射击。**Three.js + Vite + TypeScript**，触控双摇杆，**Capacitor** 打 Android 包。画面、粒子和音效都是程序生成的，没有大型二进制素材。
+无尽波次的 Q 版 3D 坦克射击。**Three.js + Vite + TypeScript**，触控双摇杆，**Capacitor** 打 Android 包。画面、粒子和音效都是程序生成的，没有大型二进制素材。竞技场大约是初版的 1.8 倍宽，第一波敌人仍生成在开场视野里。
 
 没有通关结局。波次一直变难，波间三选一强化只在本局有效。死亡后可以激励复活一次（当前是模拟广告），然后结算，一键再来。永久进度只有涂装和最佳纪录，不提供伤害。
 
@@ -38,7 +38,7 @@ npm run build        # dist/
 
 ## Android（Capacitor）
 
-需要 JDK 17 和 Android SDK。游戏本体离线，清单里只保留 WebView 需要的 `INTERNET`。横屏和沉浸式在 `android/` 工程里。
+需要 JDK 17（21 也可以）和本机 Android SDK，并设置 `ANDROID_HOME`。仓库不带 SDK。游戏本体离线，清单里只保留 WebView 需要的 `INTERNET`。横屏和沉浸式在 `android/` 工程里。装了 `@capacitor/share` 且 `npx cap sync` 之后，结算分享会走系统分享面板；没装插件时网页用 Web Share，不行就下载战绩图并复制文字。
 
 ```bash
 npm install

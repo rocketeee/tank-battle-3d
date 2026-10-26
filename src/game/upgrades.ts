@@ -49,14 +49,16 @@ export function applyUpgrade(mods: RunMods, id: string): boolean {
   return true;
 }
 
-/** Up to `count` distinct upgrades that are not maxed. */
-export function rollChoices(mods: RunMods, count = 3, rng: () => number = Math.random): UpgradeDef[] {
+/** Up to `count` distinct upgrades that are not maxed. `avoid` is the offer being rerolled. */
+export function rollChoices(mods: RunMods, count = 3, rng: () => number = Math.random, avoid: readonly string[] = []): UpgradeDef[] {
   const pool = UPGRADES.filter((u) => rankOf(mods, u.id) < u.max);
-  for (let i = pool.length - 1; i > 0; i--) {
+  const fresh = pool.filter((u) => !avoid.includes(u.id));
+  const source = fresh.length >= Math.min(count, pool.length) ? fresh : pool;
+  for (let i = source.length - 1; i > 0; i--) {
     const j = Math.floor(rng() * (i + 1));
-    const tmp = pool[i];
-    pool[i] = pool[j];
-    pool[j] = tmp;
+    const tmp = source[i];
+    source[i] = source[j];
+    source[j] = tmp;
   }
-  return pool.slice(0, count);
+  return source.slice(0, count);
 }
