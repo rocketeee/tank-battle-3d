@@ -5,11 +5,16 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
+    "dev:playables": "vite --mode playables",
     "build": "tsc --noEmit && vite build",
+    "build:playables": "tsc --noEmit && vite build --mode playables && node scripts/check-playables-dist.mjs",
     "preview": "vite preview --host",
     "typecheck": "tsc --noEmit",
+    "check:tune": "node --experimental-strip-types scripts/check-tune.ts",
     "cap:sync": "cap sync android",
-    "android:build": "npm run build && cap sync android"
+    "android:build": "npm run build && cap sync android",
+    "android:debug": "npm run build && cap sync android && cd android && ./gradlew assembleDebug",
+    "android:bundle": "npm run build && cap sync android && cd android && ./gradlew bundleRelease"
   },
   "keywords": [
     "game",
@@ -21,11 +26,15 @@
   "author": "rocketeee",
   "license": "MIT",
   "devDependencies": {
+    "@capacitor/cli": "^6.2.1",
     "@types/three": "^0.160.0",
     "typescript": "^5.5.4",
     "vite": "^5.4.2"
   },
   "dependencies": {
+    "@capacitor/android": "^6.2.1",
+    "@capacitor/core": "^6.2.1",
+    "@capacitor/share": "^6.0.4",
     "three": "^0.160.1"
   }
 }

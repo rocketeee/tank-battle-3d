@@ -11,9 +11,16 @@ interface Effect {
 export class Particles {
   private scene: THREE.Scene;
   private effects: Effect[] = [];
+  /** 1 = full juice, lower on mid-range phones. */
+  fx = 1;
 
-  constructor(scene: THREE.Scene) {
+  constructor(scene: THREE.Scene, fx = 1) {
     this.scene = scene;
+    this.fx = fx;
+  }
+
+  private count(n: number, floor = 2): number {
+    return Math.max(floor, Math.round(n * this.fx));
   }
 
   private add(obj: THREE.Object3D, life: number, update: Effect['update']) {
@@ -58,7 +65,7 @@ export class Particles {
     }
 
     // drifting smoke puffs
-    const puffs = Math.round(3 * scale);
+    const puffs = this.count(3 * scale, 1);
     for (let i = 0; i < puffs; i++) {
       const smoke = new THREE.Mesh(
         new THREE.SphereGeometry((0.4 + Math.random() * 0.3) * scale, 8, 8),
@@ -76,7 +83,7 @@ export class Particles {
     }
 
     // flying sparks/embers
-    const n = Math.round(12 * scale);
+    const n = this.count(12 * scale, 4);
     for (let i = 0; i < n; i++) {
       const spark = new THREE.Mesh(
         new THREE.SphereGeometry(0.07 * scale, 6, 6),
@@ -109,7 +116,7 @@ export class Particles {
       e.life -= dt;
     });
     // a few quick spark streaks
-    for (let i = 0; i < 4; i++) {
+    for (let i = 0; i < this.count(4, 2); i++) {
       const s = new THREE.Mesh(
         new THREE.SphereGeometry(0.06, 6, 6),
         new THREE.MeshBasicMaterial({ color, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending }),
@@ -127,7 +134,7 @@ export class Particles {
   /** Impact sparks; crit = bigger golden burst with text-like flare. */
   hit(pos: THREE.Vector3, crit: boolean) {
     const color = crit ? 0xffd54a : 0xff6b6b;
-    const n = crit ? 12 : 6;
+    const n = this.count(crit ? 12 : 6, crit ? 4 : 2);
     for (let i = 0; i < n; i++) {
       const p = new THREE.Mesh(
         new THREE.SphereGeometry(crit ? 0.1 : 0.06, 6, 6),
@@ -163,7 +170,7 @@ export class Particles {
 
   /** Jet flames burst under the tank during a jump. */
   jetFlame(pos: THREE.Vector3) {
-    for (let i = 0; i < 5; i++) {
+    for (let i = 0; i < this.count(4, 2); i++) {
       const f = new THREE.Mesh(
         new THREE.ConeGeometry(0.18, 0.5, 7),
         new THREE.MeshBasicMaterial({ color: i % 2 ? 0x67d2ff : 0xffa83b, transparent: true, opacity: 0.9, depthWrite: false }),

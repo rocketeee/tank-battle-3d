@@ -1,5 +1,7 @@
 node_modules/
 dist/
+dist-playables/
+dist-playables.zip
 *.local
 .DS_Store
 .vscode/
@@ -12,3 +14,7 @@ android/app/release/
 android/app/src/main/assets/public/
 *.keystore
 *.jks
+android/keystore.properties
+.env
+.env.*
+!.env.example

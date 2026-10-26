@@ -6,6 +6,7 @@ export interface SkillBtn {
 }
 
 export interface ControlEls {
+  moveZone: HTMLElement;
   joystick: HTMLElement;
   knob: HTMLElement;
   aimZone: HTMLElement;
@@ -14,15 +15,14 @@ export interface ControlEls {
 }
 
 /**
- * Unified input (third-person / PUBG-style):
- *  - left virtual joystick -> `move` (screen space: x right, y down)
- *  - right drag zone -> `lookDelta` (incremental camera yaw/pitch, consumed per frame)
- *  - fire button (hold) + tappable skill buttons (queued, consumed per frame)
- *  - desktop fallbacks: WASD move, mouse-drag look, J fire, Space/1-4 skills, Q/E/R/F look
+ * Touch: left stick moves, right drag looks, on-screen buttons fire and use skills.
+ * Desktop web: WASD moves, the pointer aims, left click fires. Right click is not a control.
  */
 export class Input {
   move = new THREE.Vector2(0, 0);
   lookDelta = new THREE.Vector2(0, 0);
+  /** Normalized device coords. Desktop aim reads this; touch aim ignores it. */
+  pointerNdc = new THREE.Vector2(0, 0);
   fireHeld = false;
 
   private skillQueue = new Set<string>();
@@ -36,13 +36,14 @@ export class Input {
   private lookId: number | null = null;
   private lookLast = new THREE.Vector2();
 
-  // desktop mouse-drag look
-  private mouseLook = false;
-  private mouseLast = new THREE.Vector2();
+  private mouseAim: boolean;
+  private mouseOnStick: boolean;
 
-  constructor(els: ControlEls) {
+  constructor(els: ControlEls, opts: { mouseAim?: boolean; mouseOnStick?: boolean } = {}) {
     this.els = els;
-    this.bindJoystick();
+    this.mouseAim = opts.mouseAim === true;
+    this.mouseOnStick = opts.mouseOnStick === true;
+    this.bindMove();
     this.bindLook();
     this.bindButtons();
     this.bindKeyboard();
@@ -61,6 +62,13 @@ export class Input {
     return this.keys.has(code);
   }
 
+  /** Drop held fire, queued skills, and look delta. Movement keys stay. */
+  discardActions() {
+    this.fireHeld = false;
+    this.skillQueue.clear();
+    this.lookDelta.set(0, 0);
+  }
+
   /** Returns accumulated look delta (px) and resets it. */
   takeLook(): THREE.Vector2 {
     const d = this.lookDelta.clone();
@@ -68,22 +76,21 @@ export class Input {
     return d;
   }
 
-  // ----------------------------------------------------------------- joystick
-  private bindJoystick() {
-    const { joystick, knob } = this.els;
-    const rectCenter = () => {
-      const r = joystick.getBoundingClientRect();
-      this.joyCenter.set(r.left + r.width / 2, r.top + r.height / 2);
-      this.joyRadius = r.width / 2 - 6;
-    };
-    joystick.addEventListener('pointerdown', (e) => {
+  private bindMove() {
+    const { moveZone, joystick, knob } = this.els;
+    moveZone.addEventListener('pointerdown', (e) => {
+      if (e.pointerType === 'mouse' && !this.mouseOnStick) return;
       e.preventDefault();
       this.joyId = e.pointerId;
-      joystick.setPointerCapture(e.pointerId);
-      rectCenter();
+      try { moveZone.setPointerCapture(e.pointerId); } catch { /* untrusted or lost pointer */ }
+      joystick.style.left = `${e.clientX}px`;
+      joystick.style.top = `${e.clientY}px`;
+      joystick.classList.add('active');
+      this.joyCenter.set(e.clientX, e.clientY);
+      this.joyRadius = joystick.getBoundingClientRect().width / 2 - 6;
       this.updateJoystick(e.clientX, e.clientY, knob);
     });
-    joystick.addEventListener('pointermove', (e) => {
+    moveZone.addEventListener('pointermove', (e) => {
       if (this.joyId !== e.pointerId) return;
       this.updateJoystick(e.clientX, e.clientY, knob);
     });
@@ -92,9 +99,10 @@ export class Input {
       this.joyId = null;
       this.move.set(0, 0);
       knob.style.transform = 'translate(0px, 0px)';
+      joystick.classList.remove('active');
     };
-    joystick.addEventListener('pointerup', end);
-    joystick.addEventListener('pointercancel', end);
+    moveZone.addEventListener('pointerup', end);
+    moveZone.addEventListener('pointercancel', end);
   }
 
   private updateJoystick(cx: number, cy: number, knob: HTMLElement) {
@@ -106,16 +114,19 @@ export class Input {
     const kx = Math.cos(ang) * clamped;
     const ky = Math.sin(ang) * clamped;
     knob.style.transform = `translate(${kx}px, ${ky}px)`;
-    this.move.set((Math.cos(ang) * clamped) / this.joyRadius, (Math.sin(ang) * clamped) / this.joyRadius);
+    const denom = this.joyRadius || 1;
+    this.move.set((Math.cos(ang) * clamped) / denom, (Math.sin(ang) * clamped) / denom);
   }
 
-  // --------------------------------------------------------------- look zone
   private bindLook() {
     const { aimZone } = this.els;
     aimZone.addEventListener('pointerdown', (e) => {
+      if (e.pointerType === 'mouse' && !this.mouseOnStick) return;
+      const target = e.target as HTMLElement;
+      if (target.closest('.btn')) return;
       e.preventDefault();
       this.lookId = e.pointerId;
-      aimZone.setPointerCapture(e.pointerId);
+      try { aimZone.setPointerCapture(e.pointerId); } catch { /* untrusted or lost pointer */ }
       this.lookLast.set(e.clientX, e.clientY);
     });
     aimZone.addEventListener('pointermove', (e) => {
@@ -132,26 +143,29 @@ export class Input {
     aimZone.addEventListener('pointercancel', end);
   }
 
-  // ----------------------------------------------------------------- buttons
   private bindButtons() {
     const { fireBtn, skills } = this.els;
     fireBtn.addEventListener('pointerdown', (e) => {
       e.preventDefault();
+      e.stopPropagation();
+      try { fireBtn.setPointerCapture(e.pointerId); } catch { /* untrusted or lost pointer */ }
       fireBtn.classList.add('pressed');
       this.fireHeld = true;
     });
-    const fireUp = (e: Event) => {
+    const fireUp = (e: PointerEvent) => {
+      if (!this.fireHeld) return;
       e.preventDefault();
       fireBtn.classList.remove('pressed');
       this.fireHeld = false;
     };
     fireBtn.addEventListener('pointerup', fireUp);
     fireBtn.addEventListener('pointercancel', fireUp);
-    fireBtn.addEventListener('pointerleave', fireUp);
 
     for (const s of skills) {
       s.el.addEventListener('pointerdown', (e) => {
         e.preventDefault();
+        e.stopPropagation();
+        try { s.el.setPointerCapture(e.pointerId); } catch { /* untrusted or lost pointer */ }
         s.el.classList.add('pressed');
         this.skillQueue.add(s.name);
       });
@@ -161,16 +175,15 @@ export class Input {
       };
       s.el.addEventListener('pointerup', up);
       s.el.addEventListener('pointercancel', up);
-      s.el.addEventListener('pointerleave', up);
     }
   }
 
-  // ---------------------------------------------------------------- keyboard
   private bindKeyboard() {
     const skillKeys: Record<string, string> = {
       Space: 'jump', Digit1: 'spread', Digit2: 'shield', Digit3: 'orbital', Digit4: 'dash',
     };
     window.addEventListener('keydown', (e) => {
+      if (e.repeat && skillKeys[e.code]) return;
       this.keys.add(e.code);
       if (e.code === 'KeyJ') this.fireHeld = true;
       if (skillKeys[e.code]) {
@@ -197,34 +210,27 @@ export class Input {
     else if (this.joyId === null) this.move.set(0, 0);
   }
 
-  // ------------------------------------------------------------ desktop mouse
+  private trackPointer(e: MouseEvent) {
+    if (!this.mouseAim) return;
+    const w = window.innerWidth || 1;
+    const h = window.innerHeight || 1;
+    this.pointerNdc.set((e.clientX / w) * 2 - 1, -(e.clientY / h) * 2 + 1);
+  }
+
   private bindMouse() {
-    const canvas = () => document.querySelector('canvas');
+    window.addEventListener('mousemove', (e) => this.trackPointer(e));
     window.addEventListener('mousedown', (e) => {
-      const t = e.target as HTMLElement;
-      if (t.closest('.btn,.bigbtn,.joystick')) return;
-      if (e.button === 0) {
-        // left side fires, right side starts a look-drag
-        if (e.clientX < window.innerWidth * 0.45) {
-          this.fireHeld = true;
-        } else {
-          this.mouseLook = true;
-          this.mouseLast.set(e.clientX, e.clientY);
-        }
-      }
-    });
-    window.addEventListener('mousemove', (e) => {
-      if (!this.mouseLook) return;
-      this.lookDelta.x += e.clientX - this.mouseLast.x;
-      this.lookDelta.y += e.clientY - this.mouseLast.y;
-      this.mouseLast.set(e.clientX, e.clientY);
+      this.trackPointer(e);
+      if (!this.mouseAim || e.button !== 0) return;
+      const t = e.target as HTMLElement | null;
+      if (t?.closest('.btn,.bigbtn,.textbtn,.card,.joystick,.panel,a,.move-zone,.aim-zone')) return;
+      this.fireHeld = true;
     });
     window.addEventListener('mouseup', (e) => {
-      if (e.button === 0) {
-        this.fireHeld = false;
-        this.mouseLook = false;
-      }
+      if (e.button === 0 && !this.keys.has('KeyJ')) this.fireHeld = false;
     });
-    void canvas;
+    if (!this.mouseAim) {
+      window.addEventListener('contextmenu', (e) => e.preventDefault());
+    }
   }
 }
