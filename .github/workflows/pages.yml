@@ -2,7 +2,9 @@ name: pages
 
 on:
   push:
-    branches: [main]
+    branches:
+      - main
+      - cursor/mobile-play-wave1-6414
   workflow_dispatch:
 
 permissions:

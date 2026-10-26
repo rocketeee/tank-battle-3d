@@ -12,6 +12,7 @@
 | 包名 `applicationId` | `com.rocketeee.tankbattle3d` |
 | 版本 | versionName `1.0` / versionCode `1` |
 | 默认语言文案 | 中文，英文对照写在下面 |
+| 联系邮箱 | rocketeee@gmail.com（Steve Zhou / rocketeee） |
 
 **不要改包名。** 如果商店展示名想加英文，只改 Play 的应用标题（50 字以内），例如 `萌坦大战`。包名一旦上传过就不能换。没有“为了上架而改名”的必要。
 
@@ -28,18 +29,22 @@
 - `AndroidManifest.xml` 的 `meta-data` `privacy_policy_url`
 - 本文件和 `README.md`
 
-### 怎么让这个 URL 能打开
+### 怎么让这个 URL 能打开（不合并 main）
 
-仓库里还不能替你打开 GitHub Pages 开关。合并到 `main` 之后：
+联系邮箱已经是 `rocketeee@gmail.com`，写在 `docs/privacy.html`。不要再换回占位地址。
 
-1. 打开 GitHub 仓库 **Settings → Pages**。
-2. **Build and deployment → Source** 选 **GitHub Actions**。
-3. `.github/workflows/pages.yml` 会在推到 `main` 时把 `docs/` 发布出去。也可以在 Actions 里手动跑 `pages`。
-4. 仓库需要是公开的，或者账号允许私有仓库使用 Pages。
-5. 部署成功后打开上面的 URL，确认能看到中英政策，而不是 404。
-6. 把 `docs/privacy.html` 里的 `TODO_CONTACT_EMAIL@example.com` 换成能收信的邮箱，再部署一次。这是占位，不是真实邮箱。
+`.github/workflows/pages.yml` 在下面两种情况把 `docs/` 发到 GitHub Pages（源是 **GitHub Actions**，不是把 PR 合并进 `main`）：
 
-在 Pages 打开之前，用浏览器直接打开仓库里的 `docs/privacy.html` 可以审文案。Play Console 的隐私政策栏要等 URL 公网可访问再粘贴。
+- 推送到 `main` 或 `cursor/mobile-play-wave1-6414`
+- Actions 里手动跑 `pages`（`workflow_dispatch`）
+
+重新发布：
+
+```bash
+gh workflow run pages.yml --ref cursor/mobile-play-wave1-6414
+```
+
+仓库需要是公开的，或者账号允许私有仓库使用 Pages。部署成功后打开上面的 URL，应能看到中英政策和 `rocketeee@gmail.com`。Play Console 的隐私政策栏粘贴同一 URL。不要把本 PR 合并进 `main` 才算发布。
 
 ## 短说明（80 字以内）
 
@@ -105,18 +110,20 @@ English:
 | 用户能否要求删除 | 无账号。卸载或清除数据即可 | 同上。没有服务器账号可删 |
 | 是否出售数据 | 否 | 否 |
 
-## 图片尺寸清单（本 PR 不生成商店图）
+## 图片（已放在仓库，尚未上传 Console）
 
-| 素材 | 尺寸 | 格式 | 状态 |
-| --- | --- | --- | --- |
-| 高分辨率图标 | 512×512 | 32-bit PNG | 未做。启动器 mipmap 不能直接当这条 |
-| 置顶大图 Feature graphic | 1024×500 | PNG 或 JPEG，不要透明通道问题 | 未做 |
-| 手机截图 | 至少 2 张，最多 8 张。横屏建议 **1920×1080**（16:9）。短边 ≥ 320，长边 ≤ 3840 | PNG 或 JPEG | 未做。游戏是横屏 |
-| 7 英寸平板截图 | 可选，同样 16:9 | PNG 或 JPEG | 可先不传 |
-| 10 英寸平板截图 | 可选 | PNG 或 JPEG | 可先不传 |
-| 宣传视频 | YouTube 公开链接 | 可选 | 未做 |
+| 素材 | 尺寸 | 文件 |
+| --- | --- | --- |
+| 高分辨率图标 | 512×512 PNG | [store/icon-512.png](store/icon-512.png) |
+| 置顶大图 Feature graphic | 1024×500 PNG，无透明通道 | [store/feature-1024x500.png](store/feature-1024x500.png) |
+| 手机截图 · 对局 | 1920×1080 PNG | [store/screenshot-gameplay-1920x1080.png](store/screenshot-gameplay-1920x1080.png) |
+| 手机截图 · 整备 | 1920×1080 PNG | [store/screenshot-hub-1920x1080.png](store/screenshot-hub-1920x1080.png) |
 
-截图里不要出现真实旗帜、徽记或血腥。结算界面可以露出波次和击杀。
+两张截图来自横屏页面的真实界面：对局有波次、血量和触控按钮；整备有四项金币升级。没有真实旗帜或血腥。
+
+启动器自适应图标没有换成这张 512 图。APK 仍用 `android/app/src/main/res/mipmap-anydpi-v26/ic_launcher.xml`（背景色 + `mipmap/ic_launcher_foreground`）。Play 的高分辨率图标填 `store/icon-512.png`。若要桌面图标和商店图一致，再单独替换各档 `ic_launcher_foreground.png`。
+
+还没做、提交前仍可空着：7 英寸和 10 英寸平板截图、YouTube 宣传视频。这些不是手机商品页的必填项。
 
 ## 签名与 AAB（只在本机构建，不上传）
 
@@ -163,4 +170,4 @@ JDK 17 或 21 都可以。`ANDROID_HOME` 指向已安装的 platform 34 和 buil
 - 空的环境变量样例：`.env.example`。即使填了 `VITE_ADMOB_APP_ID`，这一版也会继续走模拟，因为适配器还没写。
 - 商品 id：`remove_ads`、`skin_berry`。没有伤害类商品，也没有金币礼包。金币只从对局结算来，整备满级后不再加战斗力。
 
-接真 SDK 之前要做完：联系邮箱、Pages URL 可访问、数据安全表按 SDK 披露改写、IARC、单独的上传密钥。这些都还要开发者点头，本仓库不代提交。
+接真 SDK 之前还要做完：确认 Pages 上的隐私 URL 能打开、数据安全表按 SDK 披露改写、IARC、单独的上传密钥。联系邮箱已经是 rocketeee@gmail.com。这些都还要开发者点头，本仓库不代提交，也不上传 AAB。
