@@ -44,7 +44,13 @@
 gh workflow run pages.yml --ref cursor/mobile-play-wave1-6414
 ```
 
-仓库需要是公开的，或者账号允许私有仓库使用 Pages。部署成功后打开上面的 URL，应能看到中英政策和 `rocketeee@gmail.com`。Play Console 的隐私政策栏粘贴同一 URL。不要把本 PR 合并进 `main` 才算发布。
+仓库是公开的。部署成功后打开上面的 URL，应能看到中英政策和 `rocketeee@gmail.com`。Play Console 的隐私政策栏粘贴同一 URL。不要把本 PR 合并进 `main` 才算发布。
+
+当前还差一次人工开关。2026-10-26 用本分支推送已经跑过 `pages`：`actions/upload-pages-artifact` 成功，`actions/deploy-pages` 失败，日志是 `Failed to create deployment (status: 404) ... Ensure GitHub Pages has been enabled`（run `40281391709`）。用 API 打开 Pages 也被拒：
+
+`POST /repos/rocketeee/tank-battle-3d/pages` → **403** `Resource not accessible by integration`。响应头 `X-Accepted-Github-Permissions: pages=write,administration=write`。这个云端令牌没有仓库管理权限，不能替你改 Settings。
+
+你在 GitHub 打开 **Settings → Pages → Build and deployment → Source → GitHub Actions**，保存后再跑一次上面的 `gh workflow run`。不用合并 `main`。
 
 ## 短说明（80 字以内）
 
