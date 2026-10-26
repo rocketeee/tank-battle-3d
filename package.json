@@ -8,6 +8,7 @@
     "build": "tsc --noEmit && vite build",
     "preview": "vite preview --host",
     "typecheck": "tsc --noEmit",
+    "check:tune": "node --experimental-strip-types scripts/check-tune.ts",
     "cap:sync": "cap sync android",
     "android:build": "npm run build && cap sync android"
   },
@@ -21,11 +22,14 @@
   "author": "rocketeee",
   "license": "MIT",
   "devDependencies": {
+    "@capacitor/cli": "^6.2.1",
     "@types/three": "^0.160.0",
     "typescript": "^5.5.4",
     "vite": "^5.4.2"
   },
   "dependencies": {
+    "@capacitor/android": "^6.2.1",
+    "@capacitor/core": "^6.2.1",
     "three": "^0.160.1"
   }
 }

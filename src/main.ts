@@ -1,5 +1,8 @@
 import './styles.css';
 import { Game } from './game/Game';
+import { detectQuality } from './game/quality';
+
+document.documentElement.classList.add(`quality-${detectQuality().tier}`);
 
 const app = document.getElementById('app')!;
 
@@ -29,12 +32,17 @@ function dismissIntro() {
 intro.addEventListener('pointerdown', dismissIntro);
 window.setTimeout(dismissIntro, 2800);
 
-// best-effort landscape lock on first user gesture (native APK is locked via manifest)
-function tryLockLandscape() {
+// First gesture on mobile web: fullscreen + landscape. The APK locks this in the manifest.
+function enterImmersive() {
+  const touch = navigator.maxTouchPoints > 0;
+  if (touch) {
+    const el = document.documentElement as HTMLElement & { requestFullscreen?: () => Promise<void> };
+    void el.requestFullscreen?.().catch(() => undefined);
+  }
   const o = screen.orientation as ScreenOrientation & { lock?: (o: string) => Promise<void> };
-  o?.lock?.('landscape').catch(() => {});
+  void o?.lock?.('landscape').catch(() => undefined);
 }
-window.addEventListener('pointerdown', tryLockLandscape, { once: true });
+window.addEventListener('pointerdown', enterImmersive, { once: true });
 
 // loading screen while modules init
 const loading = document.createElement('div');

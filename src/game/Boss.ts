@@ -22,21 +22,25 @@ export class Boss {
   private color: number;
   private altitude: number;
   private speed: number;
+  private pressure: number;
+  private dmgScale: number;
   private atkTimer = 2.0;
   private burstTimer = 5.0;
   private spiralAngle = 0;
   private enraged = false;
 
-  constructor(scene: THREE.Scene, level: number) {
+  constructor(scene: THREE.Scene, level: number, opts?: { name?: string; hp?: number; pressure?: number; dmg?: number }) {
     this.level = level;
-    const cfg = BOSS_CONFIG[level];
+    const cfg = BOSS_CONFIG[level] ?? BOSS_CONFIG[0];
     this.group = makeBoss(level);
-    this.hpMax = cfg.hp;
-    this.hp = cfg.hp;
-    this.name = cfg.name;
+    this.hpMax = opts?.hp ?? cfg.hp;
+    this.hp = this.hpMax;
+    this.name = opts?.name ?? cfg.name;
     this.color = cfg.color;
     this.altitude = cfg.altitude;
     this.speed = cfg.speed;
+    this.pressure = opts?.pressure ?? (level >= 2 ? 2 : level === 1 ? 1 : 0);
+    this.dmgScale = opts?.dmg ?? 1;
     this.headY = (this.group.userData.headY as number) ?? 2.5;
     scene.add(this.group);
   }
@@ -76,47 +80,50 @@ export class Boss {
     // aimed shots
     this.atkTimer -= dt;
     if (this.atkTimer <= 0) {
-      this.atkTimer = (this.level === 2 ? 1.2 : 1.6) * rate;
+      this.atkTimer = (this.pressure >= 2 ? 1.15 : 1.55) * rate;
       const muzzle = this.muzzleWorld();
       const baseDir = new THREE.Vector3(playerPos.x - muzzle.x, (playerPos.y + 0.6) - muzzle.y, playerPos.z - muzzle.z).normalize();
-      const spread = this.level + 1;
+      const spread = this.pressure >= 1 ? 2 : 1;
+      const shotDmg = Math.max(1, 2 * this.dmgScale);
       for (let i = -spread; i <= spread; i++) {
         const a = i * 0.12;
         const dir = baseDir.clone().applyAxisAngle(new THREE.Vector3(0, 1, 0), a);
-        intents.push({ pos: muzzle.clone(), dir, color: this.color, speed: 16, damage: 2 });
+        intents.push({ pos: muzzle.clone(), dir, color: this.color, speed: 16, damage: shotDmg });
       }
     }
 
-    // radial burst / spiral
+    // radial burst / spiral — pressure 0 is aimed shots only (early boss)
+    if (this.pressure >= 1) {
     this.burstTimer -= dt;
     if (this.burstTimer <= 0) {
-      this.burstTimer = (this.level === 2 ? 0.12 : 3.5) * (this.enraged ? 0.7 : 1);
+      this.burstTimer = (this.pressure >= 2 ? 0.34 : 3.4) * (this.enraged ? 0.75 : 1);
       const center = new THREE.Vector3(p.x, p.y + this.headY * 0.5, p.z);
-      if (this.level === 2) {
-        // continuous spiral
-        this.spiralAngle += 0.5;
+      const shotDmg = Math.max(1, 1.5 * this.dmgScale);
+      if (this.pressure >= 2) {
+        this.spiralAngle += 0.45;
         for (let k = 0; k < 3; k++) {
           const a = this.spiralAngle + (k * Math.PI * 2) / 3;
           const dir = new THREE.Vector3(Math.cos(a), 0, Math.sin(a));
-          intents.push({ pos: center.clone(), dir, color: this.color, speed: 12, damage: 2 });
+          intents.push({ pos: center.clone(), dir, color: this.color, speed: 11, damage: shotDmg });
         }
       } else {
-        const count = 12;
+        const count = 10;
         for (let i = 0; i < count; i++) {
           const a = (i / count) * Math.PI * 2;
           const dir = new THREE.Vector3(Math.cos(a), 0, Math.sin(a));
-          intents.push({ pos: center.clone(), dir, color: this.color, speed: 11, damage: 2 });
+          intents.push({ pos: center.clone(), dir, color: this.color, speed: 10, damage: shotDmg });
         }
       }
+    }
     }
 
     return intents;
   }
 
-  takeDamage(dmg: number, hitY: number, particles: Particles): { crit: boolean; dmg: number; killed: boolean } {
+  takeDamage(dmg: number, hitY: number, particles: Particles, critMul = 2): { crit: boolean; dmg: number; killed: boolean } {
     const headWorldY = this.group.position.y + this.headY;
     const crit = hitY >= headWorldY - 0.9;
-    const finalDmg = crit ? Math.round(dmg * 2) : dmg;
+    const finalDmg = crit ? Math.round(dmg * critMul) : Math.round(dmg);
     this.hp -= finalDmg;
     const hitPos = new THREE.Vector3(this.group.position.x + (Math.random() - 0.5), hitY, this.group.position.z + (Math.random() - 0.5));
     particles.hit(hitPos, crit);

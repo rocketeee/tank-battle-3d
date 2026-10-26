@@ -3,6 +3,7 @@ import { makeTank } from './AssetFactory';
 import { Particles } from './Particles';
 import { AudioEngine } from './Audio';
 import { Input } from './Input';
+import { RunMods, emptyMods } from './upgrades';
 import { clamp, damp, rotateToward } from './util';
 
 const HP_MAX = 10;
@@ -60,9 +61,12 @@ export class Player {
   private dashTime = 0;
   private dashDir = new THREE.Vector3();
 
+  mods: RunMods = emptyMods();
+
   private particles: Particles;
   private audio: AudioEngine;
   private pendingShock: LandShock | null = null;
+  private fxT = 0;
 
   constructor(scene: THREE.Scene, particles: Particles, audio: AudioEngine) {
     this.group = makeTank();
@@ -99,19 +103,50 @@ export class Player {
     this.bodyYaw = 0;
     this.aimYaw = 0;
     this.group.visible = true;
+    this.hpMax = HP_MAX + this.mods.hpBonus;
+    this.hp = this.hpMax;
+  }
+
+  /** Paint only. Does not read or write mods. */
+  applySkin(body: number, dark: number) {
+    const paint = this.group.userData.paintBody as THREE.MeshStandardMaterial | undefined;
+    const shade = this.group.userData.paintDark as THREE.MeshStandardMaterial | undefined;
+    paint?.color.setHex(body);
+    shade?.color.setHex(dark);
+  }
+
+  resync() {
+    const prev = this.hpMax;
+    this.hpMax = HP_MAX + this.mods.hpBonus;
+    const gain = this.hpMax - prev;
+    if (gain > 0) this.hp += gain;
+    this.hp = Math.min(this.hp, this.hpMax);
+  }
+
+  /** One rewarded revive: a single life, full hull, brief blink. */
+  revive() {
+    this.dead = false;
+    this.lives = 1;
+    this.hp = this.hpMax;
+    this.invincible = 3.2;
+    this.group.visible = true;
   }
 
   get protectedNow(): boolean {
     return this.invincible > 0 || this.shieldTime > 0;
   }
 
+  private scaledCd(base: number): number {
+    return base * this.mods.cd;
+  }
+
   cdRatio(name: string): number {
     switch (name) {
-      case 'jump': return clamp(this.jumpCd / JUMP_CD, 0, 1);
-      case 'spread': return clamp(this.spreadCd / SPREAD_CD, 0, 1);
-      case 'shield': return clamp(this.shieldCd / SHIELD_CD, 0, 1);
-      case 'orbital': return clamp(this.orbitalCd / ORBITAL_CD, 0, 1);
-      case 'dash': return clamp(this.dashCd / DASH_CD, 0, 1);
+      case 'jump': return clamp(this.jumpCd / this.scaledCd(JUMP_CD), 0, 1);
+      case 'spread': return clamp(this.spreadCd / this.scaledCd(SPREAD_CD), 0, 1);
+      case 'shield': return clamp(this.shieldCd / this.scaledCd(SHIELD_CD), 0, 1);
+      case 'orbital': return clamp(this.orbitalCd / this.scaledCd(ORBITAL_CD), 0, 1);
+      case 'dash': return clamp(this.dashCd / this.scaledCd(DASH_CD), 0, 1);
       default: return 0;
     }
   }
@@ -134,7 +169,7 @@ export class Player {
         dir.normalize();
         const moveYaw = Math.atan2(dir.x, dir.z);
         this.bodyYaw = rotateToward(this.bodyYaw, moveYaw, 9 * dt);
-        this.pos.addScaledVector(dir, SPEED * mag * dt);
+        this.pos.addScaledVector(dir, SPEED * this.mods.speed * mag * dt);
       }
     }
 
@@ -142,7 +177,11 @@ export class Player {
     if (this.dashTime > 0) {
       this.dashTime -= dt;
       this.pos.addScaledVector(this.dashDir, DASH_SPEED * dt);
-      this.particles.dashTrail(new THREE.Vector3(this.pos.x, this.y + 0.6, this.pos.z), 0x67e8ff);
+      this.fxT -= dt;
+      if (this.fxT <= 0) {
+        this.fxT = 0.05;
+        this.particles.dashTrail(new THREE.Vector3(this.pos.x, this.y + 0.6, this.pos.z), 0x67e8ff);
+      }
     }
     this.pos.x = clamp(this.pos.x, -bounds, bounds);
     this.pos.z = clamp(this.pos.z, -bounds, bounds);
@@ -154,7 +193,11 @@ export class Player {
     if (this.airborne) {
       this.vy -= GRAVITY * dt;
       this.y += this.vy * dt;
-      if (Math.random() < 0.9) this.particles.jetFlame(new THREE.Vector3(this.pos.x, this.y + 0.1, this.pos.z));
+      this.fxT -= dt;
+      if (this.fxT <= 0) {
+        this.fxT = 0.07;
+        this.particles.jetFlame(new THREE.Vector3(this.pos.x, this.y + 0.1, this.pos.z));
+      }
       if (this.y <= 0) {
         this.y = 0;
         this.airborne = false;
@@ -210,7 +253,7 @@ export class Player {
     if (this.jumpCd > 0 || this.airborne) return false;
     this.airborne = true;
     this.vy = JUMP_VY;
-    this.jumpCd = JUMP_CD;
+    this.jumpCd = this.scaledCd(JUMP_CD);
     this.particles.jetFlame(new THREE.Vector3(this.pos.x, 0.1, this.pos.z));
     this.audio.jump();
     return true;
@@ -218,28 +261,28 @@ export class Player {
 
   tryShield(): boolean {
     if (this.shieldCd > 0) return false;
-    this.shieldCd = SHIELD_CD;
-    this.shieldTime = SHIELD_DUR;
+    this.shieldCd = this.scaledCd(SHIELD_CD);
+    this.shieldTime = SHIELD_DUR + this.mods.shield;
     this.particles.ring(new THREE.Vector3(this.pos.x, 0.2, this.pos.z), 0x5fd8ff, 3);
-    this.audio.jump();
+    this.audio.shield();
     return true;
   }
 
   tryDash(camYaw: number): boolean {
     if (this.dashCd > 0 || this.airborne) return false;
-    this.dashCd = DASH_CD;
+    this.dashCd = this.scaledCd(DASH_CD);
     this.dashTime = DASH_DUR;
     this.dashDir.set(Math.sin(camYaw), 0, Math.cos(camYaw)).normalize();
     this.bodyYaw = Math.atan2(this.dashDir.x, this.dashDir.z);
     this.shieldTime = Math.max(this.shieldTime, 0.35);
-    this.audio.jump();
+    this.audio.dash();
     return true;
   }
 
   /** Returns world muzzle position + direction toward `target` if ready, else null. */
   tryFire(target: THREE.Vector3 | null): { pos: THREE.Vector3; dir: THREE.Vector3 } | null {
     if (this.fireCd > 0 || this.dead) return null;
-    this.fireCd = FIRE_RATE;
+    this.fireCd = FIRE_RATE / Math.max(0.35, this.mods.fire);
     const pos = this.muzzleWorld();
     const dir = target
       ? new THREE.Vector3().subVectors(target, pos).normalize()
@@ -252,12 +295,14 @@ export class Player {
   /** Spread skill: returns a fan of muzzle pos/dir, or null if on cooldown. */
   trySpread(): { pos: THREE.Vector3; dir: THREE.Vector3 }[] | null {
     if (this.spreadCd > 0 || this.dead) return null;
-    this.spreadCd = SPREAD_CD;
+    this.spreadCd = this.scaledCd(SPREAD_CD);
     const pos = this.muzzleWorld();
     const out: { pos: THREE.Vector3; dir: THREE.Vector3 }[] = [];
-    const spread = 0.3;
-    for (let i = -2; i <= 2; i++) {
-      const a = this.aimYaw + i * spread;
+    const shots = 5 + this.mods.spread;
+    const step = 0.22;
+    const half = (shots - 1) / 2;
+    for (let i = 0; i < shots; i++) {
+      const a = this.aimYaw + (i - half) * step;
       out.push({ pos: pos.clone(), dir: new THREE.Vector3(Math.sin(a), 0, Math.cos(a)).normalize() });
     }
     this.particles.muzzle(pos.clone(), 0xffa83b);
@@ -268,7 +313,7 @@ export class Player {
 
   tryOrbital(): boolean {
     if (this.orbitalCd > 0) return false;
-    this.orbitalCd = ORBITAL_CD;
+    this.orbitalCd = this.scaledCd(ORBITAL_CD);
     this.audio.fire();
     return true;
   }

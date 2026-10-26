@@ -2,6 +2,7 @@
 export class AudioEngine {
   private ctx: AudioContext | null = null;
   private master: GainNode | null = null;
+  private lastBoom = 0;
   enabled = true;
 
   private ensure() {
@@ -60,13 +61,21 @@ export class AudioEngine {
     src.stop(t + dur);
   }
 
-  fire() { this.tone(220, 0.12, 'square', 0.25, 90); this.noise(0.12, 0.18, 900); }
-  explosion() { this.noise(0.5, 0.4, 600); this.tone(80, 0.4, 'sawtooth', 0.25, 40); }
-  hit() { this.tone(440, 0.08, 'triangle', 0.2, 300); }
-  crit() { this.tone(880, 0.12, 'square', 0.25, 1320); this.tone(660, 0.14, 'triangle', 0.2, 990); }
-  jump() { this.tone(180, 0.35, 'sine', 0.3, 520); this.noise(0.3, 0.15, 1800); }
-  hurt() { this.tone(300, 0.3, 'sawtooth', 0.3, 80); }
-  enemyShot() { this.tone(660, 0.1, 'sawtooth', 0.12, 220); }
+  fire() { this.tone(220, 0.09, 'square', 0.14, 110); this.noise(0.08, 0.1, 1400); }
+  explosion() {
+    const now = performance.now();
+    if (now - this.lastBoom < 90) return;
+    this.lastBoom = now;
+    this.noise(0.42, 0.28, 700);
+    this.tone(90, 0.32, 'sawtooth', 0.16, 46);
+  }
+  hit() { this.tone(520, 0.06, 'triangle', 0.16, 340); }
+  crit() { this.tone(880, 0.1, 'square', 0.18, 1320); this.tone(660, 0.12, 'triangle', 0.14, 990); }
+  jump() { this.tone(180, 0.28, 'sine', 0.22, 520); this.noise(0.18, 0.08, 1800); }
+  shield() { this.tone(520, 0.18, 'sine', 0.2, 880); }
+  dash() { this.noise(0.12, 0.16, 2200); this.tone(240, 0.1, 'square', 0.12, 90); }
+  hurt() { this.tone(300, 0.22, 'sawtooth', 0.22, 90); }
+  enemyShot() { this.tone(660, 0.08, 'sawtooth', 0.08, 240); }
   pickup() { this.tone(660, 0.08, 'square', 0.2); this.tone(990, 0.12, 'square', 0.2); }
   levelUp() { [523, 659, 784, 1046].forEach((f, i) => setTimeout(() => this.tone(f, 0.18, 'square', 0.25), i * 90)); }
   bossWarn() { this.tone(120, 0.6, 'sawtooth', 0.3, 220); }

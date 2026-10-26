@@ -24,8 +24,11 @@ export class Enemy {
   headY: number;
   scoreValue: number;
   meleeCd = 0;
+  meleeDamage: number;
 
   private bar: HealthBar3D;
+  private toPlayer = new THREE.Vector3();
+  private tangent = new THREE.Vector3();
   private speed: number;
   private fireTimer: number;
   private fireInterval: number;
@@ -35,30 +38,32 @@ export class Enemy {
   private bulletColor: number;
   private bulletDamage: number;
 
-  constructor(scene: THREE.Scene, kind: EnemyKind, hpScale: number, variant: number) {
+  constructor(scene: THREE.Scene, kind: EnemyKind, hpScale: number, variant: number, dmgScale = 1, speedScale = 1) {
     this.kind = kind;
     if (kind === 'alien') {
       this.group = makeGrayAlien(variant);
       this.hpMax = Math.round(40 * hpScale);
       this.radius = 0.7;
       this.headY = 1.18;
-      this.speed = rand(2.6, 3.6);
+      this.speed = rand(2.6, 3.6) * speedScale;
       this.fireInterval = rand(1.6, 2.6);
       this.altitude = 0;
       this.scoreValue = 100;
       this.bulletColor = 0x7cff6b;
-      this.bulletDamage = 1;
+      this.bulletDamage = 1 * dmgScale;
+      this.meleeDamage = 2 * dmgScale;
     } else {
       this.group = makeUfo(variant);
       this.hpMax = Math.round(55 * hpScale);
       this.radius = 1.0;
       this.headY = 0.2;
-      this.speed = rand(3.2, 4.5);
+      this.speed = rand(3.2, 4.5) * speedScale;
       this.fireInterval = rand(1.8, 2.8);
       this.altitude = rand(4.2, 5.6);
       this.scoreValue = 150;
       this.bulletColor = (this.group.userData.beamColor as number) ?? 0xb06bff;
-      this.bulletDamage = 2;
+      this.bulletDamage = 2 * dmgScale;
+      this.meleeDamage = 0;
     }
     this.hp = this.hpMax;
     this.fireTimer = rand(0.6, this.fireInterval);
@@ -73,6 +78,11 @@ export class Enemy {
     this.group.position.set(pos.x, this.altitude, pos.z);
   }
 
+  /** Push the first shot back so wave 1 can be aimed before anyone fires. */
+  arm(delay: number) {
+    this.fireTimer = Math.max(this.fireTimer, delay);
+  }
+
   faceBar(cam: THREE.Camera) {
     this.bar.faceCamera(cam);
   }
@@ -82,9 +92,10 @@ export class Enemy {
     if (!this.alive) return null;
     if (this.meleeCd > 0) this.meleeCd -= dt;
     const p = this.group.position;
-    const toPlayer = new THREE.Vector3(playerPos.x - p.x, 0, playerPos.z - p.z);
-    const dist = toPlayer.length();
-    toPlayer.normalize();
+    this.toPlayer.set(playerPos.x - p.x, 0, playerPos.z - p.z);
+    const dist = this.toPlayer.length();
+    if (dist > 0.001) this.toPlayer.multiplyScalar(1 / dist);
+    const toPlayer = this.toPlayer;
 
     if (this.kind === 'alien') {
       // approach, keep ~6 units
@@ -97,7 +108,8 @@ export class Enemy {
     } else {
       // strafe around player at fixed radius, bob in altitude
       const orbit = 9;
-      const tangent = new THREE.Vector3(-toPlayer.z, 0, toPlayer.x).multiplyScalar(this.strafeDir);
+      this.tangent.set(-toPlayer.z, 0, toPlayer.x).multiplyScalar(this.strafeDir);
+      const tangent = this.tangent;
       const radial = dist > orbit ? 1 : dist < orbit - 1.5 ? -1 : 0;
       p.addScaledVector(tangent, this.speed * dt);
       p.addScaledVector(toPlayer, radial * this.speed * 0.8 * dt);
@@ -118,10 +130,10 @@ export class Enemy {
   }
 
   /** Returns crit flag + whether killed. */
-  takeDamage(dmg: number, hitY: number, particles: Particles): { crit: boolean; dmg: number; killed: boolean } {
+  takeDamage(dmg: number, hitY: number, particles: Particles, critMul = 2): { crit: boolean; dmg: number; killed: boolean } {
     const headWorldY = this.group.position.y + this.headY;
     const crit = hitY >= headWorldY - 0.35;
-    const finalDmg = crit ? Math.round(dmg * 2) : dmg;
+    const finalDmg = crit ? Math.round(dmg * critMul) : Math.round(dmg);
     this.hp -= finalDmg;
     this.bar.set(this.hp / this.hpMax);
     const hitPos = new THREE.Vector3(this.group.position.x, hitY, this.group.position.z);

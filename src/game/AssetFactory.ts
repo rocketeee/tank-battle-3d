@@ -172,12 +172,12 @@ export function makeTank(): THREE.Group {
   const dome = sphere(0.46, bodyDark, 0, 0.32, -0.05, 18);
   dome.scale.set(1, 0.7, 1);
   turret.add(dome);
-  // yellow star emblem on turret top
-  const starMat = mat(0xffd54a, { rough: 0.35, metal: 0.3, emissive: 0xffb300, emI: 0.2 });
-  const star = new THREE.Mesh(starGeometry(0.2, 0.09), starMat);
-  star.rotation.x = -Math.PI / 2;
-  star.position.set(0, 0.5, -0.05);
-  turret.add(star);
+  // cute sticker, not a flag or military emblem
+  const sticker = sphere(0.16, mat(0xff8fb8, { rough: 0.4, emissive: 0xff6b9a, emI: 0.25 }), 0, 0.48, -0.02, 12);
+  sticker.scale.y = 0.55;
+  sticker.name = 'sticker';
+  sticker.userData.noOutline = true;
+  turret.add(sticker);
   // fat barrel along +Z
   const barrel = cyl(0.15, 0.17, 1.15, dark);
   barrel.rotation.x = Math.PI / 2;
@@ -199,24 +199,9 @@ export function makeTank(): THREE.Group {
   g.add(turret);
   applyOutline(g, 0.09);
   g.userData.muzzleLocal = new THREE.Vector3(0, 0.08, 1.5);
+  g.userData.paintBody = body;
+  g.userData.paintDark = bodyDark;
   return g;
-}
-
-/** Flat 5-point star shape extruded into a thin slab. */
-function starGeometry(outer: number, inner: number): THREE.ExtrudeGeometry {
-  const shape = new THREE.Shape();
-  for (let i = 0; i < 10; i++) {
-    const r = i % 2 === 0 ? outer : inner;
-    const a = (i / 10) * Math.PI * 2 - Math.PI / 2;
-    const x = Math.cos(a) * r;
-    const y = Math.sin(a) * r;
-    if (i === 0) shape.moveTo(x, y);
-    else shape.lineTo(x, y);
-  }
-  shape.closePath();
-  const geo = new THREE.ExtrudeGeometry(shape, { depth: 0.06, bevelEnabled: false });
-  geo.center();
-  return geo;
 }
 
 // ----------------------------------------------------------------------------

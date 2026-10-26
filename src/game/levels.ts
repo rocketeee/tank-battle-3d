@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { makeProp } from './AssetFactory';
+import { detectQuality } from './quality';
 import { rand } from './util';
 
 export interface WaveDef {
@@ -26,6 +27,7 @@ export interface LevelConfig {
   hpScale: number;
 }
 
+/** Theme art only. Combat pacing lives in waves.ts — these waves are not a campaign. */
 export const LEVELS: LevelConfig[] = [
   {
     id: 0,
@@ -98,6 +100,10 @@ export const LEVELS: LevelConfig[] = [
 export const ARENA_RADIUS = 30;
 export const PLAY_BOUNDS = 27;
 
+export function themeConfig(theme: LevelConfig['theme']): LevelConfig {
+  return LEVELS.find((level) => level.theme === theme) ?? LEVELS[0];
+}
+
 export interface Environment {
   group: THREE.Group;
   ambient: THREE.AmbientLight;
@@ -121,6 +127,7 @@ function skyTexture(top: number, bottom: number): THREE.Texture {
 }
 
 export function buildEnvironment(scene: THREE.Scene, cfg: LevelConfig): Environment {
+  const quality = detectQuality();
   const group = new THREE.Group();
 
   // sky + fog
@@ -128,8 +135,9 @@ export function buildEnvironment(scene: THREE.Scene, cfg: LevelConfig): Environm
   scene.fog = new THREE.Fog(cfg.fog, 38, 88);
 
   // outer ground (darker apron) + raised arena disc (brighter)
+  const apronSeg = quality.tier === 'low' ? 28 : 48;
   const apron = new THREE.Mesh(
-    new THREE.CircleGeometry(ARENA_RADIUS + 24, 56),
+    new THREE.CircleGeometry(ARENA_RADIUS + 24, apronSeg),
     new THREE.MeshStandardMaterial({ color: cfg.ground2, roughness: 1 }),
   );
   apron.rotation.x = -Math.PI / 2;
@@ -167,7 +175,8 @@ export function buildEnvironment(scene: THREE.Scene, cfg: LevelConfig): Environm
   scatterGroundDetail(group, cfg);
 
   // scattered props (mostly outside play bounds, some inside as cover)
-  for (let i = 0; i < cfg.propCount; i++) {
+  const propCount = Math.max(8, Math.round(cfg.propCount * quality.propScale));
+  for (let i = 0; i < propCount; i++) {
     const inside = i < cfg.propCount * 0.35;
     const r = inside ? rand(8, PLAY_BOUNDS - 2) : rand(ARENA_RADIUS, ARENA_RADIUS + 16);
     const a = rand(0, Math.PI * 2);
@@ -188,11 +197,11 @@ export function buildEnvironment(scene: THREE.Scene, cfg: LevelConfig): Environm
   hemi.position.set(0, 40, 0);
   const sun = new THREE.DirectionalLight(cfg.sun, cfg.sunIntensity);
   sun.position.set(18, 30, 16);
-  sun.castShadow = true;
-  sun.shadow.mapSize.set(2048, 2048);
+  sun.castShadow = quality.shadows;
+  sun.shadow.mapSize.set(quality.shadowMap, quality.shadowMap);
   sun.shadow.camera.near = 1;
   sun.shadow.camera.far = 90;
-  sun.shadow.radius = 4;
+  sun.shadow.radius = 1;
   const d = 40;
   sun.shadow.camera.left = -d;
   sun.shadow.camera.right = d;
@@ -229,9 +238,11 @@ const FLOWER_COLORS = [0xff6f91, 0xffd54a, 0xffffff, 0xff9bb0, 0xb06bff];
 
 /** Scatter small flowers (forest) or pebbles (desert/alien) across the arena floor. */
 function scatterGroundDetail(group: THREE.Group, cfg: LevelConfig): void {
+  const detail = detectQuality().detailScale;
   if (cfg.theme === 'forest') {
     const stemMat = new THREE.MeshStandardMaterial({ color: 0x3f9a45, roughness: 0.9 });
-    for (let i = 0; i < 70; i++) {
+    const flowers = Math.max(8, Math.round(70 * detail));
+    for (let i = 0; i < flowers; i++) {
       const a = rand(0, Math.PI * 2);
       const r = rand(3, ARENA_RADIUS - 1.5);
       const x = Math.cos(a) * r;
@@ -253,7 +264,8 @@ function scatterGroundDetail(group: THREE.Group, cfg: LevelConfig): void {
     }
   } else {
     const pebbleCol = cfg.theme === 'desert' ? 0xb89a5e : 0x5a4880;
-    for (let i = 0; i < 45; i++) {
+    const pebbles = Math.max(6, Math.round(45 * detail));
+    for (let i = 0; i < pebbles; i++) {
       const a = rand(0, Math.PI * 2);
       const r = rand(3, ARENA_RADIUS - 1.5);
       const peb = new THREE.Mesh(

@@ -1,78 +1,64 @@
 # 萌坦大战 · Tank Battle 3D
 
-A mobile 3D Q-version (chibi/cute) tank battle game built with **Three.js + Vite + TypeScript**, designed for touch and packaged for Android via **Capacitor** (AAB for the Google Play Store).
+无尽波次的 Q 版 3D 坦克射击。**Three.js + Vite + TypeScript**，触控双摇杆，**Capacitor** 打 Android 包。画面、粒子和音效都是程序生成的，没有大型二进制素材。
 
-Everything is **procedural** — low-poly meshes, particle VFX and sound effects are all generated in code, so there are no binary game assets to ship.
+没有通关结局。波次一直变难，波间三选一强化只在本局有效。死亡后可以激励复活一次（当前是模拟广告），然后结算，一键再来。永久进度只有涂装和最佳纪录，不提供伤害。
 
-## Gameplay
+## 怎么玩
 
-- **Left touch joystick** — drive the tank.
-- **Right touch drag** — aim the turret (auto-aim assist when idle; mouse-aim on desktop).
-- **💥 开炮 (Fire)** — shoot. Hitting an enemy's head deals a **critical hit** (2×, gold damage numbers).
-- **🔥 跳跃 (Jump)** — leap with a jet-flame VFX; the landing creates a shockwave that damages nearby ground enemies. Has a cooldown.
-- **3 lives.** When your HP hits zero you lose a life, then blink with **3 seconds of invincibility**.
+- **左半屏按住** — 浮动摇杆移动（跟镜头方向）。
+- **右半屏拖动** — 转动视角，准星射击，靠近敌人时有辅助瞄准。
+- **💥 开炮** 按住连射。打中头部是暴击。
+- **技能** — 跳跃冲击、散射、护盾、天罚、冲刺。有冷却。
+- 清完一波会暂停，**三选一**。本局可看一次模拟激励广告换一批。
+- 三条命用完后可 **激励复活 1 次**。放弃或第二次倒下会结算（波次 / 击杀 / 时间），再点一次「再来一局」。
+- 主页可调瞄准灵敏度：**低 / 中 / 高**。
 
-### Enemies
-- **小灰人** — ground gray aliens that chase and melee/shoot you.
-- **飞碟 (UFO)** — flying saucers that strafe and fire beams.
-- Every enemy has a **health bar above its head**.
+### 电脑调试
 
-### Levels (3, each with a boss)
-1. **森林 Forest** — 机械统帅 (stone-golem mech boss)
-2. **沙漠 Desert** — 沙暴蝎王 (beetle/scorpion mech boss)
-3. **外星球 Alien planet** — 虚空母舰 (void mothership UFO boss)
+- **WASD / 方向键** 移动
+- **鼠标右半屏拖动** 或按住右键转视角，**J** 或左半屏点击开炮
+- **空格** 跳跃，**1–4** 散射 / 护盾 / 天罚 / 冲刺
+- **Enter** 开始或再来，复活界面 **R** 复活、**Esc** 放弃
 
-## Controls (desktop, for testing)
-- **WASD / Arrow keys** — move
-- **Mouse** — aim, **left click** — fire
-- **Space** — jump
-
-## Development
+## 开发
 
 ```bash
 npm install
-npm run dev        # vite dev server at http://localhost:5173
-npm run typecheck  # tsc --noEmit (strict)
-npm run build      # tsc --noEmit && vite build  -> dist/
+npm run dev          # http://localhost:5173
+npm run typecheck    # tsc --noEmit
+npm run check:tune   # 波次曲线、广告频控、涂装不加伤害
+npm run build        # dist/
 ```
 
-### QA URL params
-- `?level=N` — start at level N (0=forest, 1=desert, 2=alien).
-- `?boss=1` — skip the waves and jump straight to the level boss.
+调试参数：
 
-## Android packaging (Capacitor)
+- `?wave=N` — 从第 N 波开始（5 和 10 是守卫波）。
+- `?fps=1` — 左下角显示帧率和像素比。
 
-The web build (`dist/`) is wrapped in a native Android shell with Capacitor and exported as an AAB for the Play Store. Requires the Android SDK + JDK + Gradle.
+## Android（Capacitor）
+
+需要 JDK 17 和 Android SDK。游戏本体离线，清单里只保留 WebView 需要的 `INTERNET`。横屏和沉浸式在 `android/` 工程里。
 
 ```bash
+npm install
 npm run build
-npx cap add android        # first time only
-npm run cap:sync           # cap sync android
-# then build the AAB from the android/ project (Gradle / Android Studio)
+npx cap add android    # 只有第一次
+npm run cap:sync       # 把 dist/ 同步进 android
+cd android && ./gradlew assembleDebug
+# 发布包：cd android && ./gradlew bundleRelease
 ```
 
-## Tech stack
-- [Three.js](https://threejs.org/) `0.160` — WebGL 3D
-- [Vite](https://vitejs.dev/) `5` + [TypeScript](https://www.typescriptlang.org/) `5` (strict)
-- [Capacitor](https://capacitorjs.com/) — Android packaging
+签名密钥不要提交。`*.jks` 已在 `.gitignore`。
 
-## Project layout
-```
-src/
-  main.ts            # bootstrap + loading screen
-  styles.css         # HUD / touch controls / overlays
-  game/
-    Game.ts          # orchestrator + state machine + collisions
-    Player.ts        # tank: move / aim / jump skill / lives / invincibility
-    Enemy.ts         # gray aliens + UFOs (AI, health bars, crits)
-    Boss.ts          # per-level boss attack patterns
-    levels.ts        # data-driven level configs + environment builder
-    HUD.ts           # DOM HUD (status, boss bar, level chips, minimap, overlays)
-    Input.ts         # touch joystick + aim zone + buttons + keyboard/mouse
-    Bullet.ts        # bullet pool + movement
-    Particles.ts     # explosion / muzzle / hit / ring / jet-flame VFX
-    Audio.ts         # procedural WebAudio SFX
-    HealthBar.ts     # 3D billboard health bars + floating damage text
-    AssetFactory.ts  # all procedural low-poly meshes
-    util.ts          # math helpers
-```
+## 上架还没做（不要在这一版接真广告）
+
+这些留到下一波，需要账号和合规材料，而不是再写玩法：
+
+- 公开隐私政策 URL（即使声明不收集数据，Play 也要链接）
+- 数据安全表、内容分级、目标受众
+- 广告同意（UMP / GDPR）和真正的激励、插屏 SDK
+- 512 图标、1024×500 横幅、手机截图、宣传视频
+- 应用签名交给 Play App Signing，上传密钥只放本机
+
+当前「去除广告」「草莓涂装」「激励复活」「换一批」「插屏」都是本地模拟：插屏最多每两次结算出现一次，启动和开火时不会出现，并且不会给伤害。
