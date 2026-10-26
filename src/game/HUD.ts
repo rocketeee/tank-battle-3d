@@ -1,3 +1,4 @@
+import { GearSlot, GEAR_SLOTS, SOFT_CAP, skinGoldPrice, upgradeCost } from './gear';
 import { ControlEls } from './Input';
 import { MetaSave, SKINS, ownsSkin } from './meta';
 import { Sensitivity } from './settings';
@@ -26,6 +27,8 @@ export interface SettleInfo {
   bestWave: number;
   bestKills: number;
   unlocked: string[];
+  goldGain: number;
+  gold: number;
 }
 
 export class HUD {
@@ -43,6 +46,12 @@ export class HUD {
   onSensitivity: ((s: Sensitivity) => void) | null = null;
   onSkin: ((id: string) => void) | null = null;
   onStub: ((kind: 'ads' | 'skin') => void) | null = null;
+  onHub: (() => void) | null = null;
+  onHubBack: (() => void) | null = null;
+  onSortie: (() => void) | null = null;
+  onResume: (() => void) | null = null;
+  onGear: ((slot: GearSlot) => void) | null = null;
+  onBuySkin: ((id: string) => void) | null = null;
 
   private hpFill: HTMLElement;
   private hpText: HTMLElement;
@@ -78,6 +87,13 @@ export class HUD {
   private shareLine: HTMLElement;
   private adsBtn: HTMLButtonElement;
   private skinRow: HTMLElement;
+  private menuGold: HTMLElement;
+  private hub: HTMLElement;
+  private hubGold: HTMLElement;
+  private slotsEl: HTMLElement;
+  private skinShop: HTMLElement;
+  private pause: HTMLElement;
+  private deskHint: HTMLElement;
   private sensBtns: HTMLButtonElement[];
   private adTimer = 0;
   private adDone: (() => void) | null = null;
@@ -131,6 +147,13 @@ export class HUD {
     this.adsBtn = root.querySelector('[data-stub="ads"]')!;
     this.bestLine = root.querySelector('.bestline')!;
     this.skinRow = root.querySelector('.skins')!;
+    this.menuGold = root.querySelector('.menu-gold')!;
+    this.hub = root.querySelector('.hub-panel')!;
+    this.hubGold = root.querySelector('.hub-gold')!;
+    this.slotsEl = root.querySelector('.slots')!;
+    this.skinShop = root.querySelector('.skin-shop')!;
+    this.pause = root.querySelector('.pause-panel')!;
+    this.deskHint = root.querySelector('.desk-hint')!;
     this.sensBtns = Array.from(root.querySelectorAll('.sens button')) as HTMLButtonElement[];
 
     this.controls = {
@@ -143,7 +166,12 @@ export class HUD {
     };
 
     root.querySelector('.start')!.addEventListener('click', () => this.onStart?.());
+    root.querySelector('.open-hub')!.addEventListener('click', () => this.onHub?.());
     root.querySelector('.retry')!.addEventListener('click', () => this.onRetry?.());
+    root.querySelector('.to-hub')!.addEventListener('click', () => this.onHub?.());
+    root.querySelector('.sortie')!.addEventListener('click', () => this.onSortie?.());
+    root.querySelector('.hub-back')!.addEventListener('click', () => this.onHubBack?.());
+    root.querySelector('.resume')!.addEventListener('click', () => this.onResume?.());
     root.querySelector('.home')!.addEventListener('click', () => this.onHome?.());
     root.querySelector('.share')!.addEventListener('click', () => this.onShare?.());
     root.querySelector('.do-revive')!.addEventListener('click', () => this.onRevive?.());
@@ -162,6 +190,7 @@ export class HUD {
   renderMenu(meta: MetaSave, sensitivity: Sensitivity) {
     const best = meta.bestWave > 0 ? `最佳 第 ${meta.bestWave} 波 · 击杀 ${meta.bestKills}` : '还没有纪录，第一波很温柔';
     this.bestLine.textContent = best;
+    this.menuGold.textContent = `金币 ${meta.gold}`;
     for (const btn of this.sensBtns) btn.classList.toggle('active', btn.dataset.sens === sensitivity);
     this.adsBtn.disabled = meta.removeAds;
     this.adsBtn.textContent = meta.removeAds ? '插屏已关闭（模拟支付）' : '去除广告（未接入支付）';
@@ -200,8 +229,61 @@ export class HUD {
   showSettle(info: SettleInfo) {
     const fresh = info.unlocked.length ? `<br/>新涂装 ${info.unlocked.join('、')}（仅外观）` : '';
     this.settleStats.innerHTML =
-      `第 <b>${info.wave}</b> 波<br/>击杀 ${info.kills} · 存活 ${formatClock(info.time)}<br/>最佳 第 ${info.bestWave} 波 · ${info.bestKills} 杀${fresh}`;
+      `第 <b>${info.wave}</b> 波<br/>击杀 ${info.kills} · 存活 ${formatClock(info.time)}<br/>金币 +${info.goldGain} · 持有 ${info.gold}<br/>最佳 第 ${info.bestWave} 波 · ${info.bestKills} 杀${fresh}`;
     this.showOnly('settle');
+  }
+
+  showHub(meta: MetaSave) {
+    this.hubGold.textContent = `金币 ${meta.gold}`;
+    this.slotsEl.innerHTML = '';
+    for (const slot of GEAR_SLOTS) {
+      const level = meta.gear[slot.id];
+      const cost = upgradeCost(level);
+      const b = document.createElement('button');
+      b.type = 'button';
+      b.className = 'card gear';
+      b.dataset.slot = slot.id;
+      b.disabled = cost === null;
+      const action = cost === null ? '已满级' : `升级 ${cost} 金币`;
+      b.innerHTML = `<b>${slot.name}</b><span class="lv">Lv.${level}/${SOFT_CAP}</span><span>${slot.blurb} · ${action}</span>`;
+      b.addEventListener('click', () => this.onGear?.(slot.id));
+      this.slotsEl.appendChild(b);
+    }
+    this.skinShop.innerHTML = '';
+    for (const skin of SKINS) {
+      if (skin.iap || skin.unlockWave <= 0) continue;
+      const price = skinGoldPrice(skin.id);
+      if (price === null) continue;
+      const owned = ownsSkin(meta, skin.id);
+      const b = document.createElement('button');
+      b.type = 'button';
+      b.className = 'textbtn skinbuy';
+      b.dataset.skin = skin.id;
+      if (owned && meta.skin === skin.id) {
+        b.disabled = true;
+        b.textContent = `${skin.name} 使用中`;
+      } else if (owned) {
+        b.textContent = `装备${skin.name}`;
+      } else {
+        b.textContent = `${skin.name} ${price} 金币`;
+      }
+      b.addEventListener('click', () => this.onBuySkin?.(skin.id));
+      this.skinShop.appendChild(b);
+    }
+    this.showOnly('hub');
+  }
+
+  showPause() {
+    this.showOnly('pause');
+  }
+
+  showDeskHint(text: string) {
+    this.deskHint.textContent = text;
+    this.deskHint.classList.remove('hidden');
+  }
+
+  hideDeskHint() {
+    this.deskHint.classList.add('hidden');
   }
 
   showAd(label: string, mode: string, onDone: () => void) {
@@ -213,6 +295,8 @@ export class HUD {
     this.upgrade.classList.add('hidden');
     this.revive.classList.add('hidden');
     this.settle.classList.add('hidden');
+    this.hub.classList.add('hidden');
+    this.pause.classList.add('hidden');
     this.ad.classList.remove('hidden');
     this.adTimer = window.setTimeout(() => this.finishAd(), 1600);
   }
@@ -238,11 +322,14 @@ export class HUD {
     this.hideAd();
   }
 
-  private showOnly(which: 'menu' | 'upgrade' | 'revive' | 'settle' | null) {
+  private showOnly(which: 'menu' | 'upgrade' | 'revive' | 'settle' | 'hub' | 'pause' | null) {
     this.menu.classList.toggle('hidden', which !== 'menu');
     this.upgrade.classList.toggle('hidden', which !== 'upgrade');
     this.revive.classList.toggle('hidden', which !== 'revive');
     this.settle.classList.toggle('hidden', which !== 'settle');
+    this.hub.classList.toggle('hidden', which !== 'hub');
+    this.pause.classList.toggle('hidden', which !== 'pause');
+    if (which !== null) this.hideDeskHint();
     this.hideAd();
   }
 
@@ -388,6 +475,7 @@ const TEMPLATE = `
     <h1>萌坦大战 <span class="sub">TANK BATTLE 3D</span></h1>
     <p class="tagline">无尽波次。活下去，波间三选一，倒下再开一局。</p>
     <p class="bestline"></p>
+    <p class="menu-gold goldline"></p>
     <div class="sens">
       <span>瞄准灵敏度</span>
       <button type="button" data-sens="low">低</button>
@@ -395,14 +483,15 @@ const TEMPLATE = `
       <button type="button" data-sens="high">高</button>
     </div>
     <div class="skins"></div>
-    <p class="cosmetic-note">涂装只改颜色，火力始终是 100%</p>
+    <p class="cosmetic-note">涂装只改颜色。金币升主炮、装甲、履带、雷达，每项 20 级后显示已满级。</p>
     <button class="bigbtn start" type="button">开始游戏</button>
+    <button class="textbtn open-hub" type="button">整备</button>
     <div class="stubs">
       <button class="textbtn" type="button" data-stub="ads">去除广告（未接入支付）</button>
       <button class="textbtn" type="button" data-stub="skin">草莓涂装（未接入支付）</button>
       <a class="textbtn privacy" href="https://rocketeee.github.io/tank-battle-3d/privacy.html" target="_blank" rel="noopener">隐私政策</a>
     </div>
-    <p class="desk">左半屏移动 · 右半屏瞄准 · 按住开炮。电脑：WASD / 右拖视角 / J 开炮 / 空格·1·2·3·4</p>
+    <p class="desk">手机：左半屏移动 · 右半屏瞄准 · 按住开炮。电脑：WASD 移动 · 鼠标瞄准 · 左键开炮 · 空格跳跃 · Esc 暂停</p>
   </div>
 
   <div class="panel upgrade-panel hidden">
@@ -431,10 +520,29 @@ const TEMPLATE = `
     <h2>本局结束</h2>
     <div class="settle-stats"></div>
     <button class="bigbtn retry" type="button">再来一局</button>
+    <button class="textbtn to-hub" type="button">去整备</button>
     <div class="stubs">
       <button class="textbtn share" type="button">分享战绩</button>
       <p class="share-result"></p>
       <button class="textbtn home" type="button">主页</button>
     </div>
   </div>
+
+  <div class="panel hub-panel hidden">
+    <h2>整备</h2>
+    <p class="hub-gold goldline"></p>
+    <p class="subp">四项各 20 级。满级后按钮是已满级，金币改去买涂装。涂装不加伤害。</p>
+    <div class="slots"></div>
+    <div class="skin-shop"></div>
+    <button class="bigbtn sortie" type="button">出发</button>
+    <button class="textbtn hub-back" type="button">返回</button>
+  </div>
+
+  <div class="panel pause-panel hidden">
+    <h2>暂停</h2>
+    <p class="subp">WASD 移动 · 鼠标瞄准 · 左键开炮 · 空格跳跃</p>
+    <button class="bigbtn resume" type="button">继续</button>
+  </div>
+
+  <div class="desk-hint hidden"></div>
 `;

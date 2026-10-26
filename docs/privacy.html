@@ -40,9 +40,10 @@
     <p>游戏把下面这些内容只写在你的设备本地（浏览器 localStorage 或应用私有存储），不会上传到开发者的服务器。开发者目前没有自己的后端。</p>
     <ul>
       <li>最佳波次、击杀数、存活时间、已玩局数</li>
+      <li>金币，以及主炮、装甲、履带、雷达的整备等级（每项最高 20 级，满级后不再变强）</li>
       <li>已解锁的涂装和当前涂装（只改颜色，不加伤害）</li>
       <li>“去除插屏”的本地标记（当前是模拟支付，不是真订单）</li>
-      <li>瞄准灵敏度、是否看过新手提示</li>
+      <li>瞄准灵敏度、是否看过新手提示或电脑键位提示</li>
     </ul>
     <p>卸载应用或清除网站数据后，这些记录会消失。没有账号可删除。</p>
     <p>Android 清单里目前只有 <code>INTERNET</code>，给系统 WebView 使用。没有位置、通讯录、相机、麦克风权限。没有广告 SDK，没有支付 SDK，没有统计 SDK。</p>
@@ -68,9 +69,10 @@
     <p>The game writes the following only on your device (browser localStorage or app private storage). It is not sent to a server run by the developer. There is no first-party backend.</p>
     <ul>
       <li>Best wave, kills, survival time, and run count</li>
+      <li>Gold, and the level of the main gun, armor, tracks, and radar (20 per slot, then they stop getting stronger)</li>
       <li>Unlocked paints and the equipped paint (color only, no damage bonus)</li>
       <li>A local “remove interstitials” flag (a mock purchase, not a real order)</li>
-      <li>Aim sensitivity and whether the coach hints have been seen</li>
+      <li>Aim sensitivity, and whether the coach or desktop key hint has been seen</li>
     </ul>
     <p>Uninstalling the app or clearing site data deletes these records. There is no account to delete.</p>
     <p>The Android manifest currently requests only <code>INTERNET</code>, for the system WebView. There is no location, contacts, camera, or microphone permission. There is no ads SDK, billing SDK, or analytics SDK in this build.</p>

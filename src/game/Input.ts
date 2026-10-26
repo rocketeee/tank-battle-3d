@@ -15,14 +15,14 @@ export interface ControlEls {
 }
 
 /**
- * Dual stick:
- *  - left half spawns a floating move stick under the finger
- *  - right half drag looks (aim). Buttons sit above that zone.
- * Desktop: WASD, right-side drag or right mouse to look, J / left click to fire.
+ * Touch: left stick moves, right drag looks, on-screen buttons fire and use skills.
+ * Desktop web: WASD moves, the pointer aims, left click fires. Right click is not a control.
  */
 export class Input {
   move = new THREE.Vector2(0, 0);
   lookDelta = new THREE.Vector2(0, 0);
+  /** Normalized device coords. Desktop aim reads this; touch aim ignores it. */
+  pointerNdc = new THREE.Vector2(0, 0);
   fireHeld = false;
 
   private skillQueue = new Set<string>();
@@ -36,11 +36,11 @@ export class Input {
   private lookId: number | null = null;
   private lookLast = new THREE.Vector2();
 
-  private mouseLook = false;
-  private mouseLast = new THREE.Vector2();
+  private desktop: boolean;
 
-  constructor(els: ControlEls) {
+  constructor(els: ControlEls, desktop = false) {
     this.els = els;
+    this.desktop = desktop;
     this.bindMove();
     this.bindLook();
     this.bindButtons();
@@ -58,6 +58,13 @@ export class Input {
 
   keyHeld(code: string): boolean {
     return this.keys.has(code);
+  }
+
+  /** Drop held fire, queued skills, and look delta. Movement keys stay. */
+  discardActions() {
+    this.fireHeld = false;
+    this.skillQueue.clear();
+    this.lookDelta.set(0, 0);
   }
 
   /** Returns accumulated look delta (px) and resets it. */
@@ -201,27 +208,27 @@ export class Input {
     else if (this.joyId === null) this.move.set(0, 0);
   }
 
+  private trackPointer(e: MouseEvent) {
+    if (!this.desktop) return;
+    const w = window.innerWidth || 1;
+    const h = window.innerHeight || 1;
+    this.pointerNdc.set((e.clientX / w) * 2 - 1, -(e.clientY / h) * 2 + 1);
+  }
+
   private bindMouse() {
+    window.addEventListener('mousemove', (e) => this.trackPointer(e));
     window.addEventListener('mousedown', (e) => {
-      const t = e.target as HTMLElement;
-      if (t.closest('.btn,.bigbtn,.textbtn,.card,.joystick,.panel')) return;
-      if (e.button === 2 || (e.button === 0 && e.clientX >= window.innerWidth * 0.45)) {
-        this.mouseLook = true;
-        this.mouseLast.set(e.clientX, e.clientY);
-        return;
-      }
-      if (e.button === 0) this.fireHeld = true;
-    });
-    window.addEventListener('mousemove', (e) => {
-      if (!this.mouseLook) return;
-      this.lookDelta.x += e.clientX - this.mouseLast.x;
-      this.lookDelta.y += e.clientY - this.mouseLast.y;
-      this.mouseLast.set(e.clientX, e.clientY);
+      this.trackPointer(e);
+      if (!this.desktop || e.button !== 0) return;
+      const t = e.target as HTMLElement | null;
+      if (t?.closest('.btn,.bigbtn,.textbtn,.card,.joystick,.panel,a')) return;
+      this.fireHeld = true;
     });
     window.addEventListener('mouseup', (e) => {
       if (e.button === 0 && !this.keys.has('KeyJ')) this.fireHeld = false;
-      if (e.button === 0 || e.button === 2) this.mouseLook = false;
     });
-    window.addEventListener('contextmenu', (e) => e.preventDefault());
+    if (!this.desktop) {
+      window.addEventListener('contextmenu', (e) => e.preventDefault());
+    }
   }
 }

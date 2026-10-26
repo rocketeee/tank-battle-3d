@@ -57,7 +57,7 @@
 
 > 萌坦大战是卡通坦克射击。没有通关结局：一波接一波，波间三选一强化只在本局有效，倒下后可以看一次激励复活（当前版本是模拟），然后结算，再点一次就重来。
 >
-> 左半屏移动，右半屏瞄准，按住开炮。打中头部会暴击。永久进度只有涂装和最佳纪录，涂装只改颜色，不加伤害。
+> 左半屏移动，右半屏瞄准，按住开炮。打中头部会暴击。结算金币可在整备里升级主炮、装甲、履带、雷达，每项 20 级后显示已满级，收益递减。涂装只改颜色，不加伤害。没有战斗力礼包。网页版用键鼠，不显示虚拟摇杆。
 >
 > 当前安装包没有真实广告、没有真实支付、不需要登录。隐私政策说明了设备本地保存了什么，以及以后如果接入广告和“去除广告 / 涂装”时会怎样。
 
@@ -65,7 +65,7 @@ English:
 
 > Tank Battle 3D is a cartoon tank shooter with no ending. Waves keep coming. Upgrades picked between waves last for that run only. After you fall you may take one rewarded revive (still a mock in this build), then settle and retry in one tap.
 >
-> Move on the left half of the screen, aim on the right, and hold fire. Headshots crit. Permanent progress is paints and your best run. Paints change color only and do not add damage.
+> Move on the left half of the screen, aim on the right, and hold fire. Headshots crit. Gold from a run upgrades the main gun, armor, tracks, and radar. Each slot stops at level 20. Paints change color only and do not add damage. There is no power-pack purchase. The desktop page uses a keyboard and mouse and hides the virtual sticks.
 >
 > This build has no live ads, no live billing, and no login. The privacy policy describes what stays on the device, and what ads or cosmetic purchases would mean if they are added later.
 
@@ -87,7 +87,7 @@ English:
 
 ## 数据安全表草稿（未提交）
 
-当前这个 APK：**不收集、不上传**玩家数据。核心玩法不需要登录。本地只有最佳纪录、涂装、灵敏度、模拟“去除广告”标记。
+当前这个 APK：**不收集、不上传**玩家数据。核心玩法不需要登录。本地只有最佳纪录、金币、四项整备等级、涂装、灵敏度、模拟“去除广告”标记、是否看过操作提示。
 
 以后如果接上 AdMob 和 Play Billing，再改表。下面是计划中的答案，接 SDK 时对照 Google 的披露核对。
 
@@ -161,6 +161,6 @@ JDK 17 或 21 都可以。`ANDROID_HOME` 指向已安装的 platform 34 和 buil
 - 频控：`src/game/ads.ts`
 - 以后要换上的接口：`src/game/monetization.ts`（UMP、AdMob 激励/插屏、Play Billing）
 - 空的环境变量样例：`.env.example`。即使填了 `VITE_ADMOB_APP_ID`，这一版也会继续走模拟，因为适配器还没写。
-- 商品 id：`remove_ads`、`skin_berry`。没有伤害类商品。
+- 商品 id：`remove_ads`、`skin_berry`。没有伤害类商品，也没有金币礼包。金币只从对局结算来，整备满级后不再加战斗力。
 
 接真 SDK 之前要做完：联系邮箱、Pages URL 可访问、数据安全表按 SDK 披露改写、IARC、单独的上传密钥。这些都还要开发者点头，本仓库不代提交。

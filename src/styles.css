@@ -488,7 +488,7 @@ canvas {
   letter-spacing: 1px;
   text-shadow: 0 3px 0 rgba(0, 0, 0, 0.35);
 }
-.panel h1 .sub, .tagline, .subp, .desk, .cosmetic-note, .bestline {
+.panel h1 .sub, .tagline, .subp, .desk, .cosmetic-note, .bestline, .goldline {
   font-size: 14px;
   line-height: 1.5;
   max-width: 640px;
@@ -500,7 +500,7 @@ canvas {
   color: var(--accent);
   font-size: 0.4em;
 }
-.sens, .stubs, .skins, .cards {
+.sens, .stubs, .skins, .cards, .slots, .skin-shop {
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
@@ -554,6 +554,32 @@ canvas {
   white-space: pre-line;
   font-weight: 700;
   color: #ffd54a;
+}
+.goldline { font-weight: 800; color: var(--accent); }
+.card.gear { width: min(22vw, 180px); min-height: 92px; }
+.card.gear:disabled { opacity: 0.72; cursor: default; }
+.desk-hint {
+  position: absolute;
+  left: 50%;
+  bottom: 14%;
+  transform: translateX(-50%);
+  z-index: 16;
+  max-width: 92vw;
+  padding: 10px 16px;
+  border-radius: 999px;
+  background: rgba(8, 14, 28, 0.82);
+  color: #fff;
+  font-weight: 800;
+  text-align: center;
+  pointer-events: none;
+}
+.desk-hint.hidden { display: none; }
+html.desktop-web .btns,
+html.desktop-web .move-zone,
+html.desktop-web .joystick,
+html.desktop-web .aim-zone,
+html.desktop-web .crosshair {
+  display: none !important;
 }
 .textbtn:disabled { opacity: 0.72; cursor: default; }
 a.textbtn { text-decoration: none; display: inline-block; }

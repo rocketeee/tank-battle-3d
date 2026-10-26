@@ -62,6 +62,8 @@ export class Player {
   private dashDir = new THREE.Vector3();
 
   mods: RunMods = emptyMods();
+  /** Hub multipliers. 1 = no gold gear. Skins never write this. */
+  gear = { dmg: 1, hp: 1, speed: 1, fire: 1 };
 
   private particles: Particles;
   private audio: AudioEngine;
@@ -103,8 +105,18 @@ export class Player {
     this.bodyYaw = 0;
     this.aimYaw = 0;
     this.group.visible = true;
-    this.hpMax = HP_MAX + this.mods.hpBonus;
+    this.hpMax = this.hullMax();
     this.hp = this.hpMax;
+  }
+
+  /** Run mods and hub armor. Skins are not part of this. */
+  private hullMax(): number {
+    return (HP_MAX + this.mods.hpBonus) * this.gear.hp;
+  }
+
+  /** Bullet damage multiplier: in-run cards times hub main gun. */
+  damageScale(): number {
+    return this.mods.dmg * this.gear.dmg;
   }
 
   /** Paint only. Does not read or write mods. */
@@ -117,7 +129,7 @@ export class Player {
 
   resync() {
     const prev = this.hpMax;
-    this.hpMax = HP_MAX + this.mods.hpBonus;
+    this.hpMax = this.hullMax();
     const gain = this.hpMax - prev;
     if (gain > 0) this.hp += gain;
     this.hp = Math.min(this.hp, this.hpMax);
@@ -169,7 +181,7 @@ export class Player {
         dir.normalize();
         const moveYaw = Math.atan2(dir.x, dir.z);
         this.bodyYaw = rotateToward(this.bodyYaw, moveYaw, 9 * dt);
-        this.pos.addScaledVector(dir, SPEED * this.mods.speed * mag * dt);
+        this.pos.addScaledVector(dir, SPEED * this.mods.speed * this.gear.speed * mag * dt);
       }
     }
 
@@ -282,7 +294,7 @@ export class Player {
   /** Returns world muzzle position + direction toward `target` if ready, else null. */
   tryFire(target: THREE.Vector3 | null): { pos: THREE.Vector3; dir: THREE.Vector3 } | null {
     if (this.fireCd > 0 || this.dead) return null;
-    this.fireCd = FIRE_RATE / Math.max(0.35, this.mods.fire);
+    this.fireCd = FIRE_RATE / Math.max(0.35, this.mods.fire * this.gear.fire);
     const pos = this.muzzleWorld();
     const dir = target
       ? new THREE.Vector3().subVectors(target, pos).normalize()

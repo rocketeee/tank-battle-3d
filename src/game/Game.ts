@@ -13,6 +13,8 @@ import { rand, clamp, damp } from './util';
 import { detectQuality } from './quality';
 import { Settings, loadSettings, saveSettings, lookScale, Sensitivity } from './settings';
 import { MetaSave, loadMeta, saveMeta, skinById, ownsSkin, syncUnlocks, stubRemoveAds, stubUnlockSkin } from './meta';
+import { gearMultipliers, goldForRun, skinGoldPrice, tryBuySkin, tryUpgrade, upgradeCost, type GearSlot } from './gear';
+import { isDesktopWeb } from './platform';
 import { WaveSpec, specForWave, ArenaTheme } from './waves';
 import { applyUpgrade, emptyMods, rankOf, rollChoices, UPGRADES } from './upgrades';
 import { canOfferRevive, canRefreshChoices, shouldShowInterstitial } from './ads';
@@ -20,7 +22,7 @@ import { createMonetization } from './monetization';
 import { formatShareText, shareResult } from './share';
 import { PRODUCT_REMOVE_ADS, PRODUCT_SKIN_BERRY } from './store';
 
-type State = 'menu' | 'playing' | 'upgrade' | 'revive' | 'mockad' | 'settle';
+type State = 'menu' | 'playing' | 'paused' | 'upgrade' | 'revive' | 'mockad' | 'settle' | 'hub';
 type AdMode = 'revive' | 'refresh' | 'interstitial';
 
 const PLAYER_RADIUS = 1.1;
@@ -71,6 +73,9 @@ export class Game {
   private adMode: AdMode | null = null;
   private pendingSettle: SettleInfo | null = null;
   private coachIds: number[] = [];
+  private desktop = false;
+  private hubFrom: 'menu' | 'settle' = 'menu';
+  private runCommitted = false;
 
   private meta: MetaSave;
   private settings: Settings;
@@ -109,8 +114,9 @@ export class Game {
     this.floaters = new FloatingTextManager(this.scene);
     this.bullets = new BulletManager(this.scene);
     this.player = new Player(this.scene, this.particles, this.audio);
+    this.desktop = isDesktopWeb();
     this.hud = new HUD(root);
-    this.input = new Input(this.hud.controls);
+    this.input = new Input(this.hud.controls, this.desktop);
     this.bindHud();
 
     this.meta = loadMeta();
@@ -128,7 +134,17 @@ export class Game {
         __tank?: {
           down: () => void;
           dmg: () => number;
-          snap: () => { state: string; enemies: number; bullets: number; fire: boolean; kills: number };
+          snap: () => {
+            state: string;
+            enemies: number;
+            bullets: number;
+            fire: boolean;
+            kills: number;
+            gold: number;
+            gun: number;
+            wave: number;
+            cam: number;
+          };
         };
       };
       debug.__tank = {
@@ -139,14 +155,18 @@ export class Game {
           this.player.shieldTime = 0;
           this.damagePlayer(10);
         },
-        dmg: () => this.player.mods.dmg,
+        dmg: () => this.player.damageScale(),
         snap: () => ({
-          state: this.state,
-          enemies: this.enemies.filter((e) => e.alive).length,
-          bullets: this.bullets.list.length,
-          fire: this.input.fireHeld,
-          kills: this.kills,
-        }),
+            state: this.state,
+            enemies: this.enemies.filter((e) => e.alive).length,
+            bullets: this.bullets.list.length,
+            fire: this.input.fireHeld,
+            kills: this.kills,
+            gold: this.meta.gold,
+            gun: this.meta.gear.gun,
+            wave: this.wave,
+            cam: this.camYaw,
+          }),
       };
     }
     window.addEventListener('resize', () => this.onResize());
@@ -175,6 +195,15 @@ export class Game {
     this.hud.onSensitivity = (s) => this.setSensitivity(s);
     this.hud.onSkin = (id) => this.equipSkin(id);
     this.hud.onStub = (kind) => this.applyStub(kind);
+    this.hud.onHub = () => this.openHub();
+    this.hud.onHubBack = () => this.closeHub();
+    this.hud.onSortie = () => {
+      this.audio.resume();
+      this.startRun();
+    };
+    this.hud.onResume = () => this.resume();
+    this.hud.onGear = (slot) => this.buyGear(slot);
+    this.hud.onBuySkin = (id) => this.buySkin(id);
   }
 
   private showMenu() {
@@ -193,8 +222,10 @@ export class Game {
     this.breather = 0;
     this.reviveUsed = false;
     this.refreshUsed = false;
+    this.runCommitted = false;
     this.adMode = null;
     this.player.mods = emptyMods();
+    this.player.gear = gearMultipliers(this.meta.gear);
     this.player.reset(new THREE.Vector3(0, 0, 0));
     this.paintPlayer();
     this.camYaw = Math.PI;
@@ -393,17 +424,20 @@ export class Game {
   }
 
   private beginSettle() {
-    if (this.state === 'settle' || this.adMode === 'interstitial') return;
-    const unlocked = this.commitRun();
+    if (this.state === 'settle' || this.state === 'hub' || this.adMode === 'interstitial') return;
+    const result = this.commitRun();
     this.hud.setPlaying(false);
     this.hud.hideCrosshair();
+    this.hud.hideDeskHint();
     this.pendingSettle = {
       wave: this.wave,
       kills: this.kills,
       time: this.runTime,
       bestWave: this.meta.bestWave,
       bestKills: this.meta.bestKills,
-      unlocked,
+      unlocked: result.unlocked,
+      goldGain: result.goldGain,
+      gold: this.meta.gold,
     };
     this.meta.settlesSinceAd += 1;
     const ad = shouldShowInterstitial(this.meta.settlesSinceAd, this.meta.removeAds);
@@ -416,11 +450,15 @@ export class Game {
     }
   }
 
-  private commitRun(): string[] {
+  private commitRun(): { unlocked: string[]; goldGain: number } {
+    if (this.runCommitted) return { unlocked: [], goldGain: 0 };
+    this.runCommitted = true;
+    const goldGain = goldForRun(this.wave, this.kills);
+    this.meta.gold += goldGain;
     if (this.wave > this.meta.bestWave) this.meta.bestWave = this.wave;
     if (this.kills > this.meta.bestKills) this.meta.bestKills = this.kills;
     if (this.runTime > this.meta.bestTime) this.meta.bestTime = this.runTime;
-    return syncUnlocks(this.meta);
+    return { unlocked: syncUnlocks(this.meta), goldGain };
   }
 
   private async shareSettle() {
@@ -494,7 +532,91 @@ export class Game {
     this.player.applySkin(skin.body, skin.dark);
   }
 
+  private buyGear(slot: GearSlot) {
+    if (this.state !== 'hub') return;
+    const level = this.meta.gear[slot];
+    if (upgradeCost(level) === null) {
+      this.hud.toast('已满级');
+      this.hud.showHub(this.meta);
+      return;
+    }
+    const next = tryUpgrade(this.meta.gold, level);
+    if (!next.spent) {
+      this.hud.toast('金币不够');
+      return;
+    }
+    this.meta.gold = next.gold;
+    this.meta.gear[slot] = next.level;
+    saveMeta(this.meta);
+    this.hud.showHub(this.meta);
+    this.hud.toast('升级了，下一局生效');
+  }
+
+  private buySkin(id: string) {
+    if (this.state !== 'hub') return;
+    if (ownsSkin(this.meta, id)) {
+      this.meta.skin = id;
+      saveMeta(this.meta);
+      this.paintPlayer();
+      this.hud.showHub(this.meta);
+      this.hud.toast(`${skinById(id).name} · 只改颜色`);
+      return;
+    }
+    const price = skinGoldPrice(id);
+    const next = tryBuySkin(this.meta.gold, id, false);
+    if (!next.bought || price === null) {
+      this.hud.toast(price === null ? '这款涂装不能用金币买' : '金币不够');
+      return;
+    }
+    this.meta.gold = next.gold;
+    this.meta.unlocked.push(id);
+    this.meta.skin = id;
+    saveMeta(this.meta);
+    this.paintPlayer();
+    this.hud.showHub(this.meta);
+    this.hud.toast(`${skinById(id).name} 已换上，火力不变`);
+  }
+
+  private openHub() {
+    if (this.state !== 'menu' && this.state !== 'settle') return;
+    this.hubFrom = this.state;
+    this.state = 'hub';
+    this.hud.setPlaying(false);
+    this.hud.hideCrosshair();
+    this.hud.showHub(this.meta);
+  }
+
+  private closeHub() {
+    if (this.state !== 'hub') return;
+    if (this.hubFrom === 'settle' && this.pendingSettle) {
+      this.state = 'settle';
+      this.hud.showSettle(this.pendingSettle);
+      return;
+    }
+    this.showMenu();
+  }
+
+  private pause() {
+    if (this.state !== 'playing') return;
+    this.input.discardActions();
+    this.state = 'paused';
+    this.hud.showPause();
+  }
+
+  private resume() {
+    if (this.state !== 'paused') return;
+    this.input.discardActions();
+    this.state = 'playing';
+    this.hud.hidePanels();
+    this.hud.setPlaying(true);
+    if (!this.desktop) this.hud.showCrosshair();
+  }
+
   private maybeCoach() {
+    if (this.desktop) {
+      this.maybeDeskHint();
+      return;
+    }
     let seen = false;
     try {
       seen = localStorage.getItem('tb.coach.v1') === '1';
@@ -519,7 +641,25 @@ export class Game {
     }, 9000));
   }
 
+  private maybeDeskHint() {
+    let seen = false;
+    try {
+      seen = localStorage.getItem('tb.desk.v1') === '1';
+    } catch {
+      seen = false;
+    }
+    if (seen) return;
+    this.hud.showDeskHint('WASD 移动 · 鼠标瞄准 · 左键开炮 · 空格跳跃 · Esc 暂停');
+    try {
+      localStorage.setItem('tb.desk.v1', '1');
+    } catch {
+      /* ignore */
+    }
+    this.coachIds.push(window.setTimeout(() => this.hud.hideDeskHint(), 7000));
+  }
+
   private clearCoach() {
+    this.hud.hideDeskHint();
     for (const id of this.coachIds) window.clearTimeout(id);
     this.coachIds = [];
   }
@@ -528,8 +668,12 @@ export class Game {
     if (e.repeat) return;
     if (e.code === 'Enter' && this.state === 'menu') this.hud.onStart?.();
     else if (e.code === 'Enter' && this.state === 'settle') this.hud.onRetry?.();
+    else if (e.code === 'Enter' && this.state === 'hub') this.hud.onSortie?.();
     else if (e.code === 'KeyR' && this.state === 'revive') this.acceptRevive();
     else if (e.code === 'Escape' && this.state === 'revive') this.beginSettle();
+    else if (e.code === 'Escape' && this.state === 'playing') this.pause();
+    else if (e.code === 'Escape' && this.state === 'paused') this.resume();
+    else if (e.code === 'Escape' && this.state === 'hub') this.closeHub();
   }
 
   private clearEntities() {
@@ -580,7 +724,7 @@ export class Game {
           pos: shot.pos,
           dir: shot.dir,
           speed: 42,
-          damage: 14 * this.player.mods.dmg,
+          damage: 14 * this.player.damageScale(),
           fromPlayer: true,
         });
       }
@@ -596,7 +740,7 @@ export class Game {
             pos: s.pos,
             dir: s.dir,
             speed: 38,
-            damage: 12 * this.player.mods.dmg,
+            damage: 12 * this.player.damageScale(),
             fromPlayer: true,
             color: 0xffa83b,
           });
@@ -702,8 +846,12 @@ export class Game {
     this.camera.lookAt(tgt.x + this.camForward.x * 3, tgt.y + 1.2 + sp * 7, tgt.z + this.camForward.z * 3);
   }
 
+  private aimNdc(): THREE.Vector2 {
+    return this.desktop ? this.input.pointerNdc : SCREEN_CENTER;
+  }
+
   private resolveAimPoint(): THREE.Vector3 {
-    this.raycaster.setFromCamera(SCREEN_CENTER, this.camera);
+    this.raycaster.setFromCamera(this.aimNdc(), this.camera);
     const ray = this.raycaster.ray;
     let bestProj = Infinity;
     let found = false;
@@ -735,7 +883,7 @@ export class Game {
   }
 
   private castOrbital() {
-    this.raycaster.setFromCamera(SCREEN_CENTER, this.camera);
+    this.raycaster.setFromCamera(this.aimNdc(), this.camera);
     const hit = new THREE.Vector3();
     if (!this.raycaster.ray.intersectPlane(this.groundPlane, hit)) hit.set(this.aimBest.x, 0, this.aimBest.z);
     hit.x = clamp(hit.x, -PLAY_BOUNDS, PLAY_BOUNDS);
@@ -744,7 +892,7 @@ export class Game {
     this.particles.orbitalBeam(hit.clone(), 0x9b6bff);
     this.hud.toast('轨道打击');
     const serial = this.runSerial;
-    const damage = 140 * this.player.mods.dmg;
+    const damage = 140 * this.player.damageScale();
     window.setTimeout(() => {
       if (serial !== this.runSerial || this.state !== 'playing') return;
       this.particles.explosion(new THREE.Vector3(hit.x, 0.6, hit.z), 0x9b6bff, 2.2);
@@ -822,7 +970,7 @@ export class Game {
   }
 
   private applyShock(pos: THREE.Vector3, radius: number, damage: number) {
-    const scaled = damage * (0.7 + 0.3 * this.player.mods.dmg);
+    const scaled = damage * (0.7 + 0.3 * this.player.damageScale());
     for (const e of this.enemies) {
       if (!e.alive || e.kind === 'ufo') continue;
       const d = Math.hypot(e.group.position.x - pos.x, e.group.position.z - pos.z);

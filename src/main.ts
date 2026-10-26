@@ -1,8 +1,10 @@
 import './styles.css';
 import { Game } from './game/Game';
+import { isDesktopWeb } from './game/platform';
 import { detectQuality } from './game/quality';
 
 document.documentElement.classList.add(`quality-${detectQuality().tier}`);
+if (isDesktopWeb()) document.documentElement.classList.add('desktop-web');
 
 const app = document.getElementById('app')!;
 
@@ -64,6 +66,9 @@ function boot() {
 // give the browser one frame to paint the loader
 requestAnimationFrame(() => requestAnimationFrame(boot));
 
-// prevent context menu / pinch zoom on mobile
-window.addEventListener('contextmenu', (e) => e.preventDefault());
+// Touch play swallows the context menu. Desktop web leaves right-click alone.
+window.addEventListener('contextmenu', (e) => {
+  if (document.documentElement.classList.contains('desktop-web')) return;
+  e.preventDefault();
+});
 document.addEventListener('gesturestart', (e) => e.preventDefault());

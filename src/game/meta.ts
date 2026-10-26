@@ -1,7 +1,12 @@
 /**
- * Permanent profile. Cosmetics and best-run records only.
- * Nothing in this file may change damage, fire rate, HP, or cooldowns.
+ * Permanent profile.
+ * Gold buys hub gear (levels only — combat reads them elsewhere) and non-IAP skins.
+ * Skins and remove-ads never change damage, HP, fire rate, or speed.
+ * `cosmeticPower()` stays 0 so paint cannot be mistaken for a damage stat.
  */
+
+/** Keep aligned with SOFT_CAP in gear.ts. This file does not import gear.ts so Node tune checks can load it. */
+const GEAR_CAP = 20;
 
 const KEY = 'tb.meta.v1';
 
@@ -23,6 +28,13 @@ export const SKINS: TankSkin[] = [
   { id: 'berry', name: '草莓', body: 0xff7aa2, dark: 0xd4537a, unlockWave: 999, iap: true },
 ];
 
+export interface GearLevels {
+  gun: number;
+  armor: number;
+  tracks: number;
+  radar: number;
+}
+
 export interface MetaSave {
   bestWave: number;
   bestKills: number;
@@ -33,6 +45,8 @@ export interface MetaSave {
   /** Successful settles since the last mock interstitial. */
   settlesSinceAd: number;
   runs: number;
+  gold: number;
+  gear: GearLevels;
 }
 
 /** Always 0. Skins are paint, not a damage stat. */
@@ -50,6 +64,8 @@ export function defaultMeta(): MetaSave {
     removeAds: false,
     settlesSinceAd: 0,
     runs: 0,
+    gold: 0,
+    gear: { gun: 0, armor: 0, tracks: 0, radar: 0 },
   };
 }
 
@@ -79,6 +95,8 @@ export function loadMeta(): MetaSave {
       removeAds: parsed.removeAds === true,
       settlesSinceAd: num(parsed.settlesSinceAd),
       runs: num(parsed.runs),
+      gold: Math.max(0, Math.floor(num(parsed.gold))),
+      gear: readGear(parsed.gear),
     };
   } catch {
     return base;
@@ -122,4 +140,18 @@ export function stubUnlockSkin(meta: MetaSave, id = 'berry'): boolean {
 
 function num(v: unknown): number {
   return typeof v === 'number' && Number.isFinite(v) ? v : 0;
+}
+
+function gearLevel(v: unknown): number {
+  return Math.max(0, Math.min(GEAR_CAP, Math.floor(num(v))));
+}
+
+function readGear(v: unknown): GearLevels {
+  const g = v && typeof v === 'object' ? (v as Partial<GearLevels>) : {};
+  return {
+    gun: gearLevel(g.gun),
+    armor: gearLevel(g.armor),
+    tracks: gearLevel(g.tracks),
+    radar: gearLevel(g.radar),
+  };
 }
