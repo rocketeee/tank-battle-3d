@@ -43,11 +43,14 @@ Official size rule: initial download until `gameReady` **must** be under **30 Mi
 | Save data under 3 MiB, via the SDK | Profile is `localStorage` (`tb.meta.v1`), a few hundred bytes. | Size is fine. Playables should use `ytgame.game.saveData` / `loadData`. `localStorage` may not stick inside YouTube. |
 | Esc must not be `preventDefault`’d | Pause uses Esc and does not cancel the event. Space does call `preventDefault`. | Likely ok. Confirm in the SDK test suite. |
 
-## Top gaps
+## Top 5 gaps
 
-1. **Separate Playables artifact.** Touch HUD always on, no landscape lock, no fullscreen, no privacy link, no share, no remove-ads, no skin purchase, no mock AdMob panel.
-2. **Playables SDK.** Load it before game code. `firstFrameReady` / `gameReady`, host mute, and pause/resume. Not in the repo.
-3. **Portrait and every aspect ratio.** The rotate guard blocks 9:16, which is a normal YouTube phone frame.
-4. **Save and audio hooks** when that spike exists. Size is already small enough to ignore as a blocker.
+Size is not one of them. Initial load is 0.57 MiB stored.
+
+1. **Touch is not guaranteed.** Desktop web hides the sticks. A Playables build must show touch controls and still accept mouse on the same actions.
+2. **Landscape lock.** The portrait guard, `requestFullscreen`, and `screen.orientation.lock('landscape')` fail the “every aspect ratio, no orientation lock” rule.
+3. **No Playables SDK.** `firstFrameReady` and `gameReady` are not called. Host mute and pause/resume are missing.
+4. **Outbound links.** The menu privacy URL opens GitHub Pages in a new tab, and settle offers “分享战绩”. Playables disallow both.
+5. **Same artifact as ads.** Mock remove-ads, berry purchase, and the interstitial panel ship in this web build. A Playables zip must omit them. AdMob and Billing stay on the Play/web artifact only.
 
 Do the spike later as its own pass (`playables-spike`). This note does not start it.
