@@ -134,6 +134,7 @@ export class Game {
         __tank?: {
           down: () => void;
           dmg: () => number;
+          aim: () => { x: number; y: number; dist: number } | null;
           snap: () => {
             state: string;
             enemies: number;
@@ -156,6 +157,25 @@ export class Game {
           this.damagePlayer(10);
         },
         dmg: () => this.player.damageScale(),
+        aim: () => {
+          let best: { x: number; y: number; dist: number } | null = null;
+          const origin = this.player.pos;
+          const consider = (x: number, y: number, z: number) => {
+            const dist = Math.hypot(x - origin.x, z - origin.z);
+            if (best && dist >= best.dist) return;
+            const v = new THREE.Vector3(x, y, z).project(this.camera);
+            best = {
+              x: (v.x * 0.5 + 0.5) * window.innerWidth,
+              y: (-v.y * 0.5 + 0.5) * window.innerHeight,
+              dist,
+            };
+          };
+          for (const e of this.enemies) {
+            if (e.alive) consider(e.group.position.x, 1.1, e.group.position.z);
+          }
+          if (this.boss?.alive) consider(this.boss.group.position.x, 2, this.boss.group.position.z);
+          return best;
+        },
         snap: () => ({
             state: this.state,
             enemies: this.enemies.filter((e) => e.alive).length,
