@@ -47,17 +47,23 @@ function drawCard(info: ShareInfo): HTMLCanvasElement {
   return canvas;
 }
 
-interface CapSharePlugin {
-  share(options: { title?: string; text?: string; dialogTitle?: string }): Promise<unknown>;
+function isCancel(err: unknown): boolean {
+  const e = err as { name?: string; message?: string };
+  return e?.name === 'AbortError' || /cancel/i.test(e?.message ?? '');
 }
 
-/** Native sheet only when Capacitor and the Share plugin are both on the page. */
-function capacitorShare(): CapSharePlugin | null {
-  const cap = (window as Window & {
-    Capacitor?: { isNativePlatform?: () => boolean; Plugins?: { Share?: CapSharePlugin } };
-  }).Capacitor;
-  if (!cap?.isNativePlatform?.()) return null;
-  return cap.Plugins?.Share ?? null;
+/** Android/iOS sheet via @capacitor/share. Web keeps the browser share path below. */
+async function tryNativeShare(title: string, text: string): Promise<'shared' | 'cancelled' | 'unavailable'> {
+  try {
+    const { Capacitor } = await import('@capacitor/core');
+    if (!Capacitor.isNativePlatform()) return 'unavailable';
+    const { Share } = await import('@capacitor/share');
+    await Share.share({ title, text, dialogTitle: title });
+    return 'shared';
+  } catch (err) {
+    if (isCancel(err)) return 'cancelled';
+    return 'unavailable';
+  }
 }
 
 async function copyText(text: string): Promise<boolean> {
@@ -94,15 +100,9 @@ export async function shareResult(info: ShareInfo): Promise<'shared' | 'download
   const blob = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, 'image/png'));
   void copyText(text);
 
-  const native = capacitorShare();
-  if (native) {
-    try {
-      await native.share({ title: info.name, text, dialogTitle: info.name });
-      return 'shared';
-    } catch (err) {
-      if ((err as Error).name === 'AbortError') return 'copied';
-    }
-  }
+  const native = await tryNativeShare(info.name, text);
+  if (native === 'shared') return 'shared';
+  if (native === 'cancelled') return 'copied';
 
   const nav = navigator as Navigator & { canShare?: (data: ShareData) => boolean };
   if (blob && typeof nav.share === 'function') {

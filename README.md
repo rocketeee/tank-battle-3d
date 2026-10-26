@@ -38,27 +38,23 @@ npm run build        # dist/
 
 ## Android（Capacitor）
 
-需要 JDK 17（21 也可以）和本机 Android SDK，并设置 `ANDROID_HOME`。仓库不带 SDK。游戏本体离线，清单里只保留 WebView 需要的 `INTERNET`。横屏和沉浸式在 `android/` 工程里。装了 `@capacitor/share` 且 `npx cap sync` 之后，结算分享会走系统分享面板；没装插件时网页用 Web Share，不行就下载战绩图并复制文字。
+需要 JDK 17（21 也可以）和本机 Android SDK，并设置 `ANDROID_HOME`。仓库不带 SDK。游戏本体离线，清单里只保留 WebView 需要的 `INTERNET`。横屏和沉浸式在 `android/` 工程里。结算分享在手机上走 `@capacitor/share` 的系统面板（文字：波次、击杀、名字）。网页没有该插件时用 Web Share，附带战绩图；再不行就下载图片并复制文字。
 
 ```bash
 npm install
 npm run build
 npx cap add android    # 只有第一次
 npm run cap:sync       # 把 dist/ 同步进 android
-cd android && ./gradlew assembleDebug
-# 发布包：cd android && ./gradlew bundleRelease
+npm run android:debug  # assembleDebug
+npm run android:bundle # bundleRelease，签名见 PLAY_STORE.md
 ```
 
-签名密钥不要提交。`*.jks` 已在 `.gitignore`。
+签名密钥不要提交。`*.jks` 和 `android/keystore.properties` 已在 `.gitignore`。
 
-## 上架还没做（不要在这一版接真广告）
+## 上架草稿
 
-这些留到下一波，需要账号和合规材料，而不是再写玩法：
+文案、数据安全表、分级说明、截图尺寸、隐私政策 URL 和本地 AAB 步骤在 [PLAY_STORE.md](PLAY_STORE.md)。
 
-- 公开隐私政策 URL（即使声明不收集数据，Play 也要链接）
-- 数据安全表、内容分级、目标受众
-- 广告同意（UMP / GDPR）和真正的激励、插屏 SDK
-- 512 图标、1024×500 横幅、手机截图、宣传视频
-- 应用签名交给 Play App Signing，上传密钥只放本机
+隐私政策页面是 `docs/privacy.html`。Pages 打开后的地址是 `https://rocketeee.github.io/tank-battle-3d/privacy.html`（需要在仓库 Settings → Pages 里选 GitHub Actions，见该文档）。主菜单有同一链接。
 
-当前「去除广告」「草莓涂装」「激励复活」「换一批」「插屏」都是本地模拟：插屏最多每两次结算出现一次，启动和开火时不会出现，并且不会给伤害。
+当前「去除广告」「草莓涂装」「激励复活」「换一批」「插屏」仍是本地模拟：插屏最多每两次结算出现一次，启动和开火时不会出现，并且不会给伤害。真 AdMob、UMP、Play Billing 的接口在 `src/game/monetization.ts`，这一版不带那些 SDK。

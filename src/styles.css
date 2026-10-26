@@ -556,6 +556,7 @@ canvas {
   color: #ffd54a;
 }
 .textbtn:disabled { opacity: 0.72; cursor: default; }
+a.textbtn { text-decoration: none; display: inline-block; }
 .ad-panel { z-index: 40; background: rgba(0, 0, 0, 0.86); }
 .adbox {
   width: min(420px, 90vw);

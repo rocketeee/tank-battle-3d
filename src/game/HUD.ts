@@ -2,6 +2,7 @@ import { ControlEls } from './Input';
 import { MetaSave, SKINS, ownsSkin } from './meta';
 import { Sensitivity } from './settings';
 import { formatClock } from './share';
+import { PRIVACY_POLICY_URL } from './store';
 
 export interface MiniDot {
   x: number;
@@ -154,6 +155,8 @@ export class HUD {
     }
     root.querySelector('[data-stub="ads"]')!.addEventListener('click', () => this.onStub?.('ads'));
     root.querySelector('[data-stub="skin"]')!.addEventListener('click', () => this.onStub?.('skin'));
+    const privacy = root.querySelector('.privacy') as HTMLAnchorElement;
+    privacy.href = PRIVACY_POLICY_URL;
   }
 
   renderMenu(meta: MetaSave, sensitivity: Sensitivity) {
@@ -397,6 +400,7 @@ const TEMPLATE = `
     <div class="stubs">
       <button class="textbtn" type="button" data-stub="ads">去除广告（未接入支付）</button>
       <button class="textbtn" type="button" data-stub="skin">草莓涂装（未接入支付）</button>
+      <a class="textbtn privacy" href="https://rocketeee.github.io/tank-battle-3d/privacy.html" target="_blank" rel="noopener">隐私政策</a>
     </div>
     <p class="desk">左半屏移动 · 右半屏瞄准 · 按住开炮。电脑：WASD / 右拖视角 / J 开炮 / 空格·1·2·3·4</p>
   </div>

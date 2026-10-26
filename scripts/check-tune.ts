@@ -3,6 +3,7 @@ import { ARENA_RADIUS, PLAY_BOUNDS } from '../src/game/arena.ts';
 import { cosmeticPower, defaultMeta, SKINS, stubRemoveAds, stubUnlockSkin } from '../src/game/meta.ts';
 import { formatShareText } from '../src/game/share.ts';
 import { applyUpgrade, emptyMods, rollChoices, UPGRADES } from '../src/game/upgrades.ts';
+import { APPLICATION_ID, BILLING_PRODUCTS, LIVE_ADS_SDK, PRIVACY_POLICY_URL } from '../src/game/store.ts';
 import { specForWave } from '../src/game/waves.ts';
 
 let failed = 0;
@@ -37,6 +38,10 @@ stubUnlockSkin(meta, 'berry');
 check('stub skin unlock does not invent a damage field', cosmeticPower() === 0 && meta.skin === 'berry');
 stubRemoveAds(meta);
 check('remove-ads is a flag, not a damage stat', meta.removeAds && cosmeticPower() === 0);
+check('package id stays the store id', APPLICATION_ID === 'com.rocketeee.tankbattle3d');
+check('privacy url is the pages address', PRIVACY_POLICY_URL === 'https://rocketeee.github.io/tank-battle-3d/privacy.html');
+check('billing products are not damage', BILLING_PRODUCTS.every((id) => !/dmg|damage|power/i.test(id)) && BILLING_PRODUCTS.length >= 2);
+check('live ad sdk is not constructed', LIVE_ADS_SDK === false);
 
 check('revive offered once', canOfferRevive(false) && !canOfferRevive(true));
 check('refresh offered once', canRefreshChoices(false) && !canRefreshChoices(true));

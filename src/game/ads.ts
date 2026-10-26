@@ -1,7 +1,7 @@
 /**
  * Ad policy only. No network SDK.
- * Game shows a timed mock panel, then continues. Replace `note` with a real
- * rewarded/interstitial call in a later wave — do not grant combat power here.
+ * The mock panel still runs these rules. Live AdMob / UMP hooks live in
+ * monetization.ts and must not grant combat power.
  */
 
 /** Max one interstitial per two death-settles. Boot and combat never call this. */

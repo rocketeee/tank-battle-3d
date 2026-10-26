@@ -14,9 +14,11 @@ import { detectQuality } from './quality';
 import { Settings, loadSettings, saveSettings, lookScale, Sensitivity } from './settings';
 import { MetaSave, loadMeta, saveMeta, skinById, ownsSkin, syncUnlocks, stubRemoveAds, stubUnlockSkin } from './meta';
 import { WaveSpec, specForWave, ArenaTheme } from './waves';
-import { applyUpgrade, rankOf, rollChoices, emptyMods } from './upgrades';
+import { applyUpgrade, emptyMods, rankOf, rollChoices, UPGRADES } from './upgrades';
 import { canOfferRevive, canRefreshChoices, shouldShowInterstitial } from './ads';
+import { createMonetization } from './monetization';
 import { formatShareText, shareResult } from './share';
+import { PRODUCT_REMOVE_ADS, PRODUCT_SKIN_BERRY } from './store';
 
 type State = 'menu' | 'playing' | 'upgrade' | 'revive' | 'mockad' | 'settle';
 type AdMode = 'revive' | 'refresh' | 'interstitial';
@@ -64,6 +66,7 @@ export class Game {
   private reviveUsed = false;
   private refreshUsed = false;
   private offered: string[] = [];
+  private monetization = createMonetization();
   private runSerial = 0;
   private adMode: AdMode | null = null;
   private pendingSettle: SettleInfo | null = null;
@@ -307,7 +310,42 @@ export class Game {
   private playAd(mode: AdMode, label: string) {
     this.state = 'mockad';
     this.adMode = mode;
-    this.hud.showAd(label, mode, () => this.finishAd());
+    this.hud.showAd(label, mode, () => {
+      void this.finishAdThroughAdapter();
+    });
+  }
+
+  /** Mock panel first. A future live adapter replaces this when usesLiveSdk is true. */
+  private async finishAdThroughAdapter() {
+    const mode = this.adMode;
+    if (!mode) return;
+    if (mode === 'interstitial') {
+      await this.monetization.ads.presentInterstitial();
+      this.finishAd();
+      return;
+    }
+    const earned = await this.monetization.ads.presentRewarded(mode);
+    if (earned !== 'earned') {
+      this.adMode = null;
+      if (mode === 'revive') {
+        this.beginSettle();
+        return;
+      }
+      this.refreshUsed = false;
+      this.state = 'upgrade';
+      this.hud.showUpgrade(this.cardsFrom(this.offered), true);
+      return;
+    }
+    this.finishAd();
+  }
+
+  private cardsFrom(ids: string[]): UpgradeCard[] {
+    const cards: UpgradeCard[] = [];
+    for (const id of ids) {
+      const def = UPGRADES.find((u) => u.id === id);
+      if (def) cards.push(this.toCard(def.id, def.name, def.blurb, def.max));
+    }
+    return cards;
   }
 
   private finishAd() {
@@ -419,15 +457,29 @@ export class Game {
   }
 
   private applyStub(kind: 'ads' | 'skin') {
+    void this.applyStubAsync(kind);
+  }
+
+  private async applyStubAsync(kind: 'ads' | 'skin') {
     if (kind === 'ads') {
       if (this.meta.removeAds) {
         this.hud.toast('插屏已经关掉了');
+        return;
+      }
+      const result = await this.monetization.billing.purchase(PRODUCT_REMOVE_ADS);
+      if (result !== 'purchased') {
+        this.hud.toast('支付已取消');
         return;
       }
       stubRemoveAds(this.meta);
       saveMeta(this.meta);
       if (this.state === 'menu') this.hud.renderMenu(this.meta, this.settings.sensitivity);
       this.hud.toast('模拟支付完成：插屏已关闭，火力不变');
+      return;
+    }
+    const result = await this.monetization.billing.purchase(PRODUCT_SKIN_BERRY);
+    if (result !== 'purchased') {
+      this.hud.toast('支付已取消');
       return;
     }
     stubUnlockSkin(this.meta, 'berry');
