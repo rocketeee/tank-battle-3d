@@ -36,11 +36,13 @@ export class Input {
   private lookId: number | null = null;
   private lookLast = new THREE.Vector2();
 
-  private desktop: boolean;
+  private mouseAim: boolean;
+  private mouseOnStick: boolean;
 
-  constructor(els: ControlEls, desktop = false) {
+  constructor(els: ControlEls, opts: { mouseAim?: boolean; mouseOnStick?: boolean } = {}) {
     this.els = els;
-    this.desktop = desktop;
+    this.mouseAim = opts.mouseAim === true;
+    this.mouseOnStick = opts.mouseOnStick === true;
     this.bindMove();
     this.bindLook();
     this.bindButtons();
@@ -77,7 +79,7 @@ export class Input {
   private bindMove() {
     const { moveZone, joystick, knob } = this.els;
     moveZone.addEventListener('pointerdown', (e) => {
-      if (e.pointerType === 'mouse') return;
+      if (e.pointerType === 'mouse' && !this.mouseOnStick) return;
       e.preventDefault();
       this.joyId = e.pointerId;
       try { moveZone.setPointerCapture(e.pointerId); } catch { /* untrusted or lost pointer */ }
@@ -119,7 +121,7 @@ export class Input {
   private bindLook() {
     const { aimZone } = this.els;
     aimZone.addEventListener('pointerdown', (e) => {
-      if (e.pointerType === 'mouse') return;
+      if (e.pointerType === 'mouse' && !this.mouseOnStick) return;
       const target = e.target as HTMLElement;
       if (target.closest('.btn')) return;
       e.preventDefault();
@@ -209,7 +211,7 @@ export class Input {
   }
 
   private trackPointer(e: MouseEvent) {
-    if (!this.desktop) return;
+    if (!this.mouseAim) return;
     const w = window.innerWidth || 1;
     const h = window.innerHeight || 1;
     this.pointerNdc.set((e.clientX / w) * 2 - 1, -(e.clientY / h) * 2 + 1);
@@ -219,15 +221,15 @@ export class Input {
     window.addEventListener('mousemove', (e) => this.trackPointer(e));
     window.addEventListener('mousedown', (e) => {
       this.trackPointer(e);
-      if (!this.desktop || e.button !== 0) return;
+      if (!this.mouseAim || e.button !== 0) return;
       const t = e.target as HTMLElement | null;
-      if (t?.closest('.btn,.bigbtn,.textbtn,.card,.joystick,.panel,a')) return;
+      if (t?.closest('.btn,.bigbtn,.textbtn,.card,.joystick,.panel,a,.move-zone,.aim-zone')) return;
       this.fireHeld = true;
     });
     window.addEventListener('mouseup', (e) => {
       if (e.button === 0 && !this.keys.has('KeyJ')) this.fireHeld = false;
     });
-    if (!this.desktop) {
+    if (!this.mouseAim) {
       window.addEventListener('contextmenu', (e) => e.preventDefault());
     }
   }

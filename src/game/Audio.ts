@@ -3,6 +3,8 @@ export class AudioEngine {
   private ctx: AudioContext | null = null;
   private master: GainNode | null = null;
   private lastBoom = 0;
+  private hostAudible = true;
+  private hostPaused = false;
   enabled = true;
 
   private ensure() {
@@ -10,14 +12,38 @@ export class AudioEngine {
     const Ctor = window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
     this.ctx = new Ctor();
     this.master = this.ctx.createGain();
-    this.master.gain.value = 0.35;
+    this.master.gain.value = this.enabled ? 0.35 : 0;
     this.master.connect(this.ctx.destination);
+  }
+
+  /** YouTube mute. There is no in-game master mute button. */
+  setHostAudible(on: boolean) {
+    this.hostAudible = on;
+    this.applyHostGain();
+  }
+
+  suspendForHost() {
+    this.hostPaused = true;
+    this.applyHostGain();
+    if (this.ctx && this.ctx.state === 'running') void this.ctx.suspend();
+  }
+
+  releaseHost() {
+    this.hostPaused = false;
+    this.applyHostGain();
+    if (this.enabled && this.ctx && this.ctx.state === 'suspended') void this.ctx.resume();
   }
 
   /** Must be called from a user gesture to unlock audio on mobile. */
   resume() {
     this.ensure();
+    if (this.hostPaused) return;
     if (this.ctx && this.ctx.state === 'suspended') void this.ctx.resume();
+  }
+
+  private applyHostGain() {
+    this.enabled = this.hostAudible && !this.hostPaused;
+    if (this.master) this.master.gain.value = this.enabled ? 0.35 : 0;
   }
 
   private tone(freq: number, dur: number, type: OscillatorType, vol = 0.3, slideTo?: number) {

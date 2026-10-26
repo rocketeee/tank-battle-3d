@@ -20,14 +20,17 @@ export function defaultSettings(): Settings {
   return { sensitivity: 'mid' };
 }
 
+export function coerceSettings(parsed: Partial<Settings> | null | undefined): Settings {
+  const sensitivity: Sensitivity =
+    parsed?.sensitivity === 'low' || parsed?.sensitivity === 'high' ? parsed.sensitivity : 'mid';
+  return { sensitivity };
+}
+
 export function loadSettings(): Settings {
   try {
     const raw = localStorage.getItem(KEY);
     if (!raw) return defaultSettings();
-    const parsed = JSON.parse(raw) as Partial<Settings>;
-    const sensitivity: Sensitivity =
-      parsed.sensitivity === 'low' || parsed.sensitivity === 'high' ? parsed.sensitivity : 'mid';
-    return { sensitivity };
+    return coerceSettings(JSON.parse(raw) as Partial<Settings>);
   } catch {
     return defaultSettings();
   }

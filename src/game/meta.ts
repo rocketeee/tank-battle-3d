@@ -77,29 +77,33 @@ export function ownsSkin(meta: MetaSave, id: string): boolean {
   return meta.unlocked.includes(id);
 }
 
-export function loadMeta(): MetaSave {
+export function coerceMeta(parsed: Partial<MetaSave> | null | undefined): MetaSave {
   const base = defaultMeta();
+  if (!parsed) return base;
+  const skin = SKINS.some((s) => s.id === parsed.skin) ? (parsed.skin as string) : base.skin;
+  const unlocked = Array.isArray(parsed.unlocked) ? parsed.unlocked.filter((id) => SKINS.some((s) => s.id === id)) : base.unlocked;
+  if (!unlocked.includes('sprout')) unlocked.unshift('sprout');
+  return {
+    bestWave: num(parsed.bestWave),
+    bestKills: num(parsed.bestKills),
+    bestTime: num(parsed.bestTime),
+    skin: unlocked.includes(skin) ? skin : 'sprout',
+    unlocked,
+    removeAds: parsed.removeAds === true,
+    settlesSinceAd: num(parsed.settlesSinceAd),
+    runs: num(parsed.runs),
+    gold: Math.max(0, Math.floor(num(parsed.gold))),
+    gear: readGear(parsed.gear),
+  };
+}
+
+export function loadMeta(): MetaSave {
   try {
     const raw = localStorage.getItem(KEY);
-    if (!raw) return base;
-    const parsed = JSON.parse(raw) as Partial<MetaSave>;
-    const skin = SKINS.some((s) => s.id === parsed.skin) ? (parsed.skin as string) : base.skin;
-    const unlocked = Array.isArray(parsed.unlocked) ? parsed.unlocked.filter((id) => SKINS.some((s) => s.id === id)) : base.unlocked;
-    if (!unlocked.includes('sprout')) unlocked.unshift('sprout');
-    return {
-      bestWave: num(parsed.bestWave),
-      bestKills: num(parsed.bestKills),
-      bestTime: num(parsed.bestTime),
-      skin: unlocked.includes(skin) ? skin : 'sprout',
-      unlocked,
-      removeAds: parsed.removeAds === true,
-      settlesSinceAd: num(parsed.settlesSinceAd),
-      runs: num(parsed.runs),
-      gold: Math.max(0, Math.floor(num(parsed.gold))),
-      gear: readGear(parsed.gear),
-    };
+    if (!raw) return defaultMeta();
+    return coerceMeta(JSON.parse(raw) as Partial<MetaSave>);
   } catch {
-    return base;
+    return defaultMeta();
   }
 }
 

@@ -581,6 +581,9 @@ html.desktop-web .aim-zone,
 html.desktop-web .crosshair {
   display: none !important;
 }
+html.playables .crosshair {
+  display: none !important;
+}
 .textbtn:disabled { opacity: 0.72; cursor: default; }
 a.textbtn { text-decoration: none; display: inline-block; }
 .ad-panel { z-index: 40; background: rgba(0, 0, 0, 0.86); }

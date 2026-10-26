@@ -5,7 +5,9 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
+    "dev:playables": "vite --mode playables",
     "build": "tsc --noEmit && vite build",
+    "build:playables": "tsc --noEmit && vite build --mode playables && node scripts/check-playables-dist.mjs",
     "preview": "vite preview --host",
     "typecheck": "tsc --noEmit",
     "check:tune": "node --experimental-strip-types scripts/check-tune.ts",

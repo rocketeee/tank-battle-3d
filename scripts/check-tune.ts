@@ -1,6 +1,7 @@
 import { canOfferRevive, canRefreshChoices, shouldShowInterstitial } from '../src/game/ads.ts';
 import { ARENA_RADIUS, PLAY_BOUNDS } from '../src/game/arena.ts';
 import { usesTouchControls } from '../src/game/controlMode.ts';
+import { artifactFlags } from '../src/game/playablesPolicy.ts';
 import {
   GEAR_SLOTS,
   SOFT_CAP,
@@ -112,6 +113,13 @@ check('new profile has no gold gear', profile.gold === 0 && profile.gear.gun ===
 check('desktop web is not the touch path', !usesTouchControls(false, false, false));
 check('app and phone browsers keep touch', usesTouchControls(true, false, false) && usesTouchControls(false, true, true));
 check('a hovered pointer stays on desktop web', !usesTouchControls(false, true, false));
+const playables = artifactFlags(true);
+const pages = artifactFlags(false);
+check('playables forces touch and mouse on those actions', playables.forceTouchHud && playables.mouseOnTouchActions);
+check('playables drops landscape lock and fullscreen', !playables.landscapeLock && !playables.fullscreenOnGesture);
+check('playables drops outbound link, share, and mock ads', !playables.privacyLink && !playables.shareButton && !playables.mockRemoveAds && !playables.mockBerryIap && !playables.mockInterstitial);
+check('playables uses the sdk and cloud save', playables.playablesSdk && playables.cloudSave);
+check('pages keeps ads, share, and the landscape path', pages.privacyLink && pages.shareButton && pages.mockInterstitial && pages.landscapeLock && !pages.forceTouchHud);
 
 if (failed) {
   console.error(`${failed} checks failed`);

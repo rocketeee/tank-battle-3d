@@ -11,16 +11,17 @@ import { HUD, MiniDot, SettleInfo, UpgradeCard } from './HUD';
 import { themeConfig, buildEnvironment, Environment, PLAY_BOUNDS, ARENA_RADIUS } from './levels';
 import { rand, clamp, damp } from './util';
 import { detectQuality } from './quality';
-import { Settings, loadSettings, saveSettings, lookScale, Sensitivity } from './settings';
-import { MetaSave, loadMeta, saveMeta, skinById, ownsSkin, syncUnlocks, stubRemoveAds, stubUnlockSkin } from './meta';
+import { Settings, lookScale, Sensitivity } from './settings';
+import { MetaSave, skinById, ownsSkin, syncUnlocks } from './meta';
 import { gearMultipliers, goldForRun, skinGoldPrice, tryBuySkin, tryUpgrade, upgradeCost, type GearSlot } from './gear';
 import { isDesktopWeb } from './platform';
 import { WaveSpec, specForWave, ArenaTheme } from './waves';
 import { applyUpgrade, emptyMods, rankOf, rollChoices, UPGRADES } from './upgrades';
 import { canOfferRevive, canRefreshChoices, shouldShowInterstitial } from './ads';
 import { createMonetization } from './monetization';
-import { formatShareText, shareResult } from './share';
-import { PRODUCT_REMOVE_ADS, PRODUCT_SKIN_BERRY } from './store';
+import { readMeta, writeMeta, readSettings, writeSettings, seenFlag, markFlag } from './profile';
+import { hostAudioEnabled, onHostAudio, onHostPause, onHostResume } from './playablesSdk';
+import { PLAYABLES } from './target';
 
 type State = 'menu' | 'playing' | 'paused' | 'upgrade' | 'revive' | 'mockad' | 'settle' | 'hub';
 type AdMode = 'revive' | 'refresh' | 'interstitial';
@@ -74,6 +75,8 @@ export class Game {
   private pendingSettle: SettleInfo | null = null;
   private coachIds: number[] = [];
   private desktop = false;
+  private pointerAim = false;
+  private pausedByHost = false;
   private hubFrom: 'menu' | 'settle' = 'menu';
   private runCommitted = false;
 
@@ -114,13 +117,15 @@ export class Game {
     this.floaters = new FloatingTextManager(this.scene);
     this.bullets = new BulletManager(this.scene);
     this.player = new Player(this.scene, this.particles, this.audio);
-    this.desktop = isDesktopWeb();
+    this.desktop = PLAYABLES ? false : isDesktopWeb();
+    this.pointerAim = this.desktop || PLAYABLES;
     this.hud = new HUD(root);
-    this.input = new Input(this.hud.controls, this.desktop);
+    this.input = new Input(this.hud.controls, { mouseAim: this.pointerAim, mouseOnStick: PLAYABLES });
     this.bindHud();
+    if (PLAYABLES) this.bindPlayablesHost();
 
-    this.meta = loadMeta();
-    this.settings = loadSettings();
+    this.meta = readMeta();
+    this.settings = readSettings();
     const params = new URLSearchParams(location.search);
     const wave = parseInt(params.get('wave') ?? '', 10);
     if (!Number.isNaN(wave) && wave > 0) this.waveOverride = wave;
@@ -190,6 +195,7 @@ export class Game {
       };
     }
     window.addEventListener('resize', () => this.onResize());
+    if (PLAYABLES) window.visualViewport?.addEventListener('resize', () => this.onResize());
     window.addEventListener('keydown', (e) => this.onKey(e));
     this.showMenu();
     this.loop();
@@ -221,9 +227,31 @@ export class Game {
       this.audio.resume();
       this.startRun();
     };
-    this.hud.onResume = () => this.resume();
+    this.hud.onResume = () => {
+      this.pausedByHost = false;
+      this.resume();
+    };
     this.hud.onGear = (slot) => this.buyGear(slot);
     this.hud.onBuySkin = (id) => this.buySkin(id);
+  }
+
+  private bindPlayablesHost() {
+    this.audio.setHostAudible(hostAudioEnabled());
+    onHostAudio((on) => this.audio.setHostAudible(on));
+    onHostPause(() => {
+      this.audio.suspendForHost();
+      if (this.state === 'playing') {
+        this.pausedByHost = true;
+        this.pause();
+      }
+    });
+    onHostResume(() => {
+      this.audio.releaseHost();
+      if (this.pausedByHost) {
+        this.pausedByHost = false;
+        this.resume();
+      }
+    });
   }
 
   private showMenu() {
@@ -252,7 +280,7 @@ export class Game {
     this.camPitch = 0.12;
     this.clearEntities();
     this.meta.runs += 1;
-    saveMeta(this.meta);
+    writeMeta(this.meta);
     this.hud.hidePanels();
     this.hud.setPlaying(true);
     this.hud.showCrosshair();
@@ -329,7 +357,7 @@ export class Game {
     this.player.airborne = false;
     this.state = 'upgrade';
     this.hud.hideCrosshair();
-    this.hud.showUpgrade(cards, canRefreshChoices(this.refreshUsed));
+    this.hud.showUpgrade(cards, !PLAYABLES && canRefreshChoices(this.refreshUsed));
   }
 
   private toCard(id: string, name: string, blurb: string, max: number): UpgradeCard {
@@ -347,12 +375,14 @@ export class Game {
   }
 
   private refreshChoices() {
+    if (PLAYABLES) return;
     if (this.state !== 'upgrade' || !canRefreshChoices(this.refreshUsed)) return;
     this.refreshUsed = true;
     this.playAd('refresh', '换一批');
   }
 
   private acceptRevive() {
+    if (PLAYABLES) return;
     if (this.state !== 'revive' || !canOfferRevive(this.reviveUsed)) return;
     this.reviveUsed = true;
     this.playAd('revive', '激励复活');
@@ -435,7 +465,7 @@ export class Game {
     this.breather = 0;
     this.hud.hideCrosshair();
     this.particles.explosion(new THREE.Vector3(this.player.pos.x, 0.8, this.player.pos.z), 0xffb7d5, 1.6);
-    if (canOfferRevive(this.reviveUsed)) {
+    if (!PLAYABLES && canOfferRevive(this.reviveUsed)) {
       this.state = 'revive';
       this.hud.showRevive();
       return;
@@ -460,9 +490,9 @@ export class Game {
       gold: this.meta.gold,
     };
     this.meta.settlesSinceAd += 1;
-    const ad = shouldShowInterstitial(this.meta.settlesSinceAd, this.meta.removeAds);
+    const ad = !PLAYABLES && shouldShowInterstitial(this.meta.settlesSinceAd, this.meta.removeAds);
     if (ad) this.meta.settlesSinceAd = 0;
-    saveMeta(this.meta);
+    writeMeta(this.meta);
     if (ad) this.playAd('interstitial', '模拟插屏');
     else {
       this.state = 'settle';
@@ -482,7 +512,8 @@ export class Game {
   }
 
   private async shareSettle() {
-    if (!this.pendingSettle || this.state !== 'settle') return;
+    if (PLAYABLES || !this.pendingSettle || this.state !== 'settle') return;
+    const { formatShareText, shareResult } = await import('./share');
     const info = {
       wave: this.pendingSettle.wave,
       kills: this.pendingSettle.kills,
@@ -497,54 +528,35 @@ export class Game {
 
   private setSensitivity(s: Sensitivity) {
     this.settings.sensitivity = s;
-    saveSettings(this.settings);
+    writeSettings(this.settings);
     if (this.state === 'menu') this.hud.renderMenu(this.meta, s);
   }
 
   private equipSkin(id: string) {
     if (!ownsSkin(this.meta, id)) {
       const skin = skinById(id);
-      this.hud.toast(skin.iap ? '草莓涂装要用下面的支付占位' : `第 ${skin.unlockWave} 波解锁 ${skin.name}`);
+      if (skin.iap && !PLAYABLES) this.hud.toast('草莓涂装要用下面的支付占位');
+      else if (!skin.iap) this.hud.toast(`第 ${skin.unlockWave} 波解锁 ${skin.name}`);
       return;
     }
     this.meta.skin = id;
-    saveMeta(this.meta);
+    writeMeta(this.meta);
     this.paintPlayer();
     if (this.state === 'menu') this.hud.renderMenu(this.meta, this.settings.sensitivity);
     this.hud.toast(`${skinById(id).name} · 只改颜色`);
   }
 
   private applyStub(kind: 'ads' | 'skin') {
-    void this.applyStubAsync(kind);
-  }
-
-  private async applyStubAsync(kind: 'ads' | 'skin') {
-    if (kind === 'ads') {
-      if (this.meta.removeAds) {
-        this.hud.toast('插屏已经关掉了');
-        return;
-      }
-      const result = await this.monetization.billing.purchase(PRODUCT_REMOVE_ADS);
-      if (result !== 'purchased') {
-        this.hud.toast('支付已取消');
-        return;
-      }
-      stubRemoveAds(this.meta);
-      saveMeta(this.meta);
-      if (this.state === 'menu') this.hud.renderMenu(this.meta, this.settings.sensitivity);
-      this.hud.toast('模拟支付完成：插屏已关闭，火力不变');
-      return;
-    }
-    const result = await this.monetization.billing.purchase(PRODUCT_SKIN_BERRY);
-    if (result !== 'purchased') {
-      this.hud.toast('支付已取消');
-      return;
-    }
-    stubUnlockSkin(this.meta, 'berry');
-    saveMeta(this.meta);
-    this.paintPlayer();
-    if (this.state === 'menu') this.hud.renderMenu(this.meta, this.settings.sensitivity);
-    this.hud.toast('占位：草莓涂装已装备，火力不变');
+    if (PLAYABLES) return;
+    void import('./stubPurchase').then((mod) =>
+      mod.runStubPurchase(kind, this.meta, {
+        toast: (text) => this.hud.toast(text),
+        paint: () => this.paintPlayer(),
+        refreshMenu: () => {
+          if (this.state === 'menu') this.hud.renderMenu(this.meta, this.settings.sensitivity);
+        },
+      }),
+    );
   }
 
   private paintPlayer() {
@@ -567,7 +579,7 @@ export class Game {
     }
     this.meta.gold = next.gold;
     this.meta.gear[slot] = next.level;
-    saveMeta(this.meta);
+    writeMeta(this.meta);
     this.hud.showHub(this.meta);
     this.hud.toast('升级了，下一局生效');
   }
@@ -576,7 +588,7 @@ export class Game {
     if (this.state !== 'hub') return;
     if (ownsSkin(this.meta, id)) {
       this.meta.skin = id;
-      saveMeta(this.meta);
+      writeMeta(this.meta);
       this.paintPlayer();
       this.hud.showHub(this.meta);
       this.hud.toast(`${skinById(id).name} · 只改颜色`);
@@ -591,7 +603,7 @@ export class Game {
     this.meta.gold = next.gold;
     this.meta.unlocked.push(id);
     this.meta.skin = id;
-    saveMeta(this.meta);
+    writeMeta(this.meta);
     this.paintPlayer();
     this.hud.showHub(this.meta);
     this.hud.toast(`${skinById(id).name} 已换上，火力不变`);
@@ -629,7 +641,7 @@ export class Game {
     this.state = 'playing';
     this.hud.hidePanels();
     this.hud.setPlaying(true);
-    if (!this.desktop) this.hud.showCrosshair();
+    if (!this.pointerAim) this.hud.showCrosshair();
   }
 
   private maybeCoach() {
@@ -637,44 +649,28 @@ export class Game {
       this.maybeDeskHint();
       return;
     }
-    let seen = false;
-    try {
-      seen = localStorage.getItem('tb.coach.v1') === '1';
-    } catch {
-      seen = false;
-    }
-    if (seen) return;
-    const lines: [number, string][] = [
-      [400, '按住左半屏移动'],
-      [3200, '右半屏滑动，准星对准敌人'],
-      [6200, '按住 💥 开炮，打中脑袋会暴击'],
-    ];
+    if (seenFlag('coach')) return;
+    const lines: [number, string][] = PLAYABLES
+      ? [
+          [400, '左摇杆或 WASD 移动'],
+          [3200, '右屏滑动，或用鼠标瞄准'],
+          [6200, '按住 💥 开炮，打中脑袋会暴击'],
+        ]
+      : [
+          [400, '按住左半屏移动'],
+          [3200, '右半屏滑动，准星对准敌人'],
+          [6200, '按住 💥 开炮，打中脑袋会暴击'],
+        ];
     for (const [ms, text] of lines) {
       this.coachIds.push(window.setTimeout(() => this.hud.coach(text), ms));
     }
-    this.coachIds.push(window.setTimeout(() => {
-      try {
-        localStorage.setItem('tb.coach.v1', '1');
-      } catch {
-        /* ignore */
-      }
-    }, 9000));
+    this.coachIds.push(window.setTimeout(() => markFlag('coach'), 9000));
   }
 
   private maybeDeskHint() {
-    let seen = false;
-    try {
-      seen = localStorage.getItem('tb.desk.v1') === '1';
-    } catch {
-      seen = false;
-    }
-    if (seen) return;
+    if (seenFlag('desk')) return;
     this.hud.showDeskHint('WASD 移动 · 鼠标瞄准 · 左键开炮 · 空格跳跃 · Esc 暂停');
-    try {
-      localStorage.setItem('tb.desk.v1', '1');
-    } catch {
-      /* ignore */
-    }
+    markFlag('desk');
     this.coachIds.push(window.setTimeout(() => this.hud.hideDeskHint(), 7000));
   }
 
@@ -867,7 +863,7 @@ export class Game {
   }
 
   private aimNdc(): THREE.Vector2 {
-    return this.desktop ? this.input.pointerNdc : SCREEN_CENTER;
+    return this.pointerAim ? this.input.pointerNdc : SCREEN_CENTER;
   }
 
   private resolveAimPoint(): THREE.Vector3 {

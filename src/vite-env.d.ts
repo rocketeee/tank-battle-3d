@@ -1,3 +1,5 @@
+declare const __PLAYABLES__: boolean;
+
 interface ImportMetaEnv {
   readonly DEV: boolean;
   readonly VITE_ADMOB_APP_ID?: string;

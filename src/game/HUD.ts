@@ -1,8 +1,9 @@
+import { formatClock } from './clock';
 import { GearSlot, GEAR_SLOTS, SOFT_CAP, skinGoldPrice, upgradeCost } from './gear';
 import { ControlEls } from './Input';
 import { MetaSave, SKINS, ownsSkin } from './meta';
 import { Sensitivity } from './settings';
-import { formatClock } from './share';
+import { PLAYABLES } from './target';
 import { PRIVACY_POLICY_URL } from './store';
 
 export interface MiniDot {
@@ -77,15 +78,15 @@ export class HUD {
   private menu: HTMLElement;
   private upgrade: HTMLElement;
   private cardsEl: HTMLElement;
-  private refreshBtn: HTMLButtonElement;
-  private revive: HTMLElement;
-  private ad: HTMLElement;
-  private adKind: HTMLElement;
+  private refreshBtn: HTMLButtonElement | null;
+  private revive: HTMLElement | null;
+  private ad: HTMLElement | null;
+  private adKind: HTMLElement | null;
   private settle: HTMLElement;
   private settleStats: HTMLElement;
   private bestLine: HTMLElement;
-  private shareLine: HTMLElement;
-  private adsBtn: HTMLButtonElement;
+  private shareLine: HTMLElement | null;
+  private adsBtn: HTMLButtonElement | null;
   private skinRow: HTMLElement;
   private menuGold: HTMLElement;
   private hub: HTMLElement;
@@ -137,14 +138,14 @@ export class HUD {
     this.menu = root.querySelector('.menu-panel')!;
     this.upgrade = root.querySelector('.upgrade-panel')!;
     this.cardsEl = root.querySelector('.cards')!;
-    this.refreshBtn = root.querySelector('.refresh')!;
-    this.revive = root.querySelector('.revive-panel')!;
-    this.ad = root.querySelector('.ad-panel')!;
-    this.adKind = root.querySelector('.ad-kind')!;
+    this.refreshBtn = root.querySelector('.refresh');
+    this.revive = root.querySelector('.revive-panel');
+    this.ad = root.querySelector('.ad-panel');
+    this.adKind = root.querySelector('.ad-kind');
     this.settle = root.querySelector('.settle-panel')!;
     this.settleStats = root.querySelector('.settle-stats')!;
-    this.shareLine = root.querySelector('.share-result')!;
-    this.adsBtn = root.querySelector('[data-stub="ads"]')!;
+    this.shareLine = root.querySelector('.share-result');
+    this.adsBtn = root.querySelector('[data-stub="ads"]');
     this.bestLine = root.querySelector('.bestline')!;
     this.skinRow = root.querySelector('.skins')!;
     this.menuGold = root.querySelector('.menu-gold')!;
@@ -173,18 +174,20 @@ export class HUD {
     root.querySelector('.hub-back')!.addEventListener('click', () => this.onHubBack?.());
     root.querySelector('.resume')!.addEventListener('click', () => this.onResume?.());
     root.querySelector('.home')!.addEventListener('click', () => this.onHome?.());
-    root.querySelector('.share')!.addEventListener('click', () => this.onShare?.());
-    root.querySelector('.do-revive')!.addEventListener('click', () => this.onRevive?.());
-    root.querySelector('.giveup')!.addEventListener('click', () => this.onGiveUp?.());
-    this.refreshBtn.addEventListener('click', () => this.onRefresh?.());
-    root.querySelector('.ad-done')!.addEventListener('click', () => this.finishAd());
+    root.querySelector('.share')?.addEventListener('click', () => this.onShare?.());
+    root.querySelector('.do-revive')?.addEventListener('click', () => this.onRevive?.());
+    root.querySelector('.giveup')?.addEventListener('click', () => this.onGiveUp?.());
+    this.refreshBtn?.addEventListener('click', () => this.onRefresh?.());
+    root.querySelector('.ad-done')?.addEventListener('click', () => this.finishAd());
     for (const btn of this.sensBtns) {
       btn.addEventListener('click', () => this.onSensitivity?.(btn.dataset.sens as Sensitivity));
     }
-    root.querySelector('[data-stub="ads"]')!.addEventListener('click', () => this.onStub?.('ads'));
-    root.querySelector('[data-stub="skin"]')!.addEventListener('click', () => this.onStub?.('skin'));
-    const privacy = root.querySelector('.privacy') as HTMLAnchorElement;
-    privacy.href = PRIVACY_POLICY_URL;
+    root.querySelector('[data-stub="ads"]')?.addEventListener('click', () => this.onStub?.('ads'));
+    root.querySelector('[data-stub="skin"]')?.addEventListener('click', () => this.onStub?.('skin'));
+    if (!PLAYABLES) {
+      const privacy = root.querySelector('.privacy') as HTMLAnchorElement | null;
+      if (privacy) privacy.href = PRIVACY_POLICY_URL;
+    }
   }
 
   renderMenu(meta: MetaSave, sensitivity: Sensitivity) {
@@ -192,15 +195,19 @@ export class HUD {
     this.bestLine.textContent = best;
     this.menuGold.textContent = `金币 ${meta.gold}`;
     for (const btn of this.sensBtns) btn.classList.toggle('active', btn.dataset.sens === sensitivity);
-    this.adsBtn.disabled = meta.removeAds;
-    this.adsBtn.textContent = meta.removeAds ? '插屏已关闭（模拟支付）' : '去除广告（未接入支付）';
+    if (!PLAYABLES && this.adsBtn) {
+      this.adsBtn.disabled = meta.removeAds;
+      this.adsBtn.textContent = meta.removeAds ? '插屏已关闭（模拟支付）' : '去除广告（未接入支付）';
+    }
     this.skinRow.innerHTML = '';
     for (const skin of SKINS) {
+      if (PLAYABLES && skin.iap) continue;
       const owned = ownsSkin(meta, skin.id);
       const b = document.createElement('button');
       b.className = 'skin' + (meta.skin === skin.id ? ' on' : '') + (owned ? '' : ' locked');
       b.style.background = `#${skin.body.toString(16).padStart(6, '0')}`;
-      b.title = owned ? skin.name : skin.iap ? `${skin.name} · 支付占位` : `${skin.name} · 第 ${skin.unlockWave} 波`;
+      const lockedTitle = !PLAYABLES && skin.iap ? `${skin.name} · 支付占位` : `${skin.name} · 第 ${skin.unlockWave} 波`;
+      b.title = owned ? skin.name : lockedTitle;
       b.textContent = owned ? '' : '锁';
       b.addEventListener('click', () => this.onSkin?.(skin.id));
       this.skinRow.appendChild(b);
@@ -218,7 +225,7 @@ export class HUD {
       b.addEventListener('click', () => this.onPick?.(card.id));
       this.cardsEl.appendChild(b);
     }
-    this.refreshBtn.hidden = !canRefresh;
+    if (this.refreshBtn) this.refreshBtn.hidden = !canRefresh;
     this.showOnly('upgrade');
   }
 
@@ -287,13 +294,14 @@ export class HUD {
   }
 
   showAd(label: string, mode: string, onDone: () => void) {
+    if (PLAYABLES || !this.ad || !this.adKind) return;
     this.adKind.textContent = label;
     this.ad.dataset.mode = mode;
     this.adDone = onDone;
     window.clearTimeout(this.adTimer);
     this.menu.classList.add('hidden');
     this.upgrade.classList.add('hidden');
-    this.revive.classList.add('hidden');
+    this.revive?.classList.add('hidden');
     this.settle.classList.add('hidden');
     this.hub.classList.add('hidden');
     this.pause.classList.add('hidden');
@@ -302,12 +310,12 @@ export class HUD {
   }
 
   setShareLine(text: string) {
-    this.shareLine.textContent = text;
+    if (this.shareLine) this.shareLine.textContent = text;
   }
 
   hideAd() {
     window.clearTimeout(this.adTimer);
-    this.ad.classList.add('hidden');
+    this.ad?.classList.add('hidden');
     this.adDone = null;
   }
 
@@ -325,7 +333,7 @@ export class HUD {
   private showOnly(which: 'menu' | 'upgrade' | 'revive' | 'settle' | 'hub' | 'pause' | null) {
     this.menu.classList.toggle('hidden', which !== 'menu');
     this.upgrade.classList.toggle('hidden', which !== 'upgrade');
-    this.revive.classList.toggle('hidden', which !== 'revive');
+    this.revive?.classList.toggle('hidden', which !== 'revive');
     this.settle.classList.toggle('hidden', which !== 'settle');
     this.hub.classList.toggle('hidden', which !== 'hub');
     this.pause.classList.toggle('hidden', which !== 'pause');
@@ -437,6 +445,45 @@ export class HUD {
   }
 }
 
+const MENU_STUBS = PLAYABLES
+  ? ''
+  : `<div class="stubs">
+      <button class="textbtn" type="button" data-stub="ads">去除广告（未接入支付）</button>
+      <button class="textbtn" type="button" data-stub="skin">草莓涂装（未接入支付）</button>
+      <a class="textbtn privacy" href="${PRIVACY_POLICY_URL}" target="_blank" rel="noopener">隐私政策</a>
+    </div>`;
+
+const REFRESH_BUTTON = PLAYABLES
+  ? ''
+  : '<button class="textbtn refresh" type="button">换一批（激励 · 本局 1 次）</button>';
+
+const REVIVE_PANEL = PLAYABLES
+  ? ''
+  : `<div class="panel revive-panel hidden">
+    <h2>坦克趴窝了</h2>
+    <p class="subp">本局还能激励复活 1 次。放弃就结算。</p>
+    <button class="bigbtn do-revive" type="button">激励复活</button>
+    <button class="textbtn giveup" type="button">放弃并结算</button>
+  </div>`;
+
+const AD_PANEL = PLAYABLES
+  ? ''
+  : `<div class="panel ad-panel hidden">
+    <div class="adbox">
+      <b class="ad-kind">模拟广告</b>
+      <p>模拟广告位 · 未接入任何广告网络，不会发放战斗力。</p>
+      <button class="bigbtn ad-done" type="button">完成</button>
+    </div>
+  </div>`;
+
+const SHARE_BUTTON = PLAYABLES
+  ? ''
+  : '<button class="textbtn share" type="button">分享战绩</button><p class="share-result"></p>';
+
+const PAUSE_HINT = PLAYABLES
+  ? '左摇杆移动 · 右屏或鼠标瞄准 · 按住开炮'
+  : 'WASD 移动 · 鼠标瞄准 · 左键开炮 · 空格跳跃';
+
 const TEMPLATE = `
   <div class="vignette"></div>
   <div class="wave-badge">第 <b>1</b> 波</div>
@@ -486,11 +533,7 @@ const TEMPLATE = `
     <p class="cosmetic-note">涂装只改颜色。金币升主炮、装甲、履带、雷达，每项 20 级后显示已满级。</p>
     <button class="bigbtn start" type="button">开始游戏</button>
     <button class="textbtn open-hub" type="button">整备</button>
-    <div class="stubs">
-      <button class="textbtn" type="button" data-stub="ads">去除广告（未接入支付）</button>
-      <button class="textbtn" type="button" data-stub="skin">草莓涂装（未接入支付）</button>
-      <a class="textbtn privacy" href="https://rocketeee.github.io/tank-battle-3d/privacy.html" target="_blank" rel="noopener">隐私政策</a>
-    </div>
+    ${MENU_STUBS}
     <p class="desk">手机：左半屏移动 · 右半屏瞄准 · 按住开炮。电脑：WASD 移动 · 鼠标瞄准 · 左键开炮 · 空格跳跃 · Esc 暂停</p>
   </div>
 
@@ -498,23 +541,11 @@ const TEMPLATE = `
     <h2>波间整备</h2>
     <p class="subp">三选一，只在本局生效。选定后回复 2 点生命。</p>
     <div class="cards"></div>
-    <button class="textbtn refresh" type="button">换一批（激励 · 本局 1 次）</button>
+    ${REFRESH_BUTTON}
   </div>
 
-  <div class="panel revive-panel hidden">
-    <h2>坦克趴窝了</h2>
-    <p class="subp">本局还能激励复活 1 次。放弃就结算。</p>
-    <button class="bigbtn do-revive" type="button">激励复活</button>
-    <button class="textbtn giveup" type="button">放弃并结算</button>
-  </div>
-
-  <div class="panel ad-panel hidden">
-    <div class="adbox">
-      <b class="ad-kind">模拟广告</b>
-      <p>模拟广告位 · 未接入任何广告网络，不会发放战斗力。</p>
-      <button class="bigbtn ad-done" type="button">完成</button>
-    </div>
-  </div>
+  ${REVIVE_PANEL}
+  ${AD_PANEL}
 
   <div class="panel settle-panel hidden">
     <h2>本局结束</h2>
@@ -522,8 +553,7 @@ const TEMPLATE = `
     <button class="bigbtn retry" type="button">再来一局</button>
     <button class="textbtn to-hub" type="button">去整备</button>
     <div class="stubs">
-      <button class="textbtn share" type="button">分享战绩</button>
-      <p class="share-result"></p>
+      ${SHARE_BUTTON}
       <button class="textbtn home" type="button">主页</button>
     </div>
   </div>
@@ -540,7 +570,7 @@ const TEMPLATE = `
 
   <div class="panel pause-panel hidden">
     <h2>暂停</h2>
-    <p class="subp">WASD 移动 · 鼠标瞄准 · 左键开炮 · 空格跳跃</p>
+    <p class="subp">${PAUSE_HINT}</p>
     <button class="bigbtn resume" type="button">继续</button>
   </div>
 
