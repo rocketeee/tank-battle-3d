@@ -33,7 +33,7 @@
 
 联系邮箱已经是 `rocketeee@gmail.com`，写在 `docs/privacy.html`。不要再换回占位地址。
 
-`.github/workflows/pages.yml` 在下面两种情况把 `docs/` 发到 GitHub Pages（源是 **GitHub Actions**，不是把 PR 合并进 `main`）：
+`.github/workflows/pages.yml` 在下面两种情况构建游戏并把 `dist/`（含复制进去的 `docs/privacy.html`）发到 GitHub Pages。首页是可玩的网页，隐私政策仍在 `/privacy.html`。源是 **GitHub Actions**，不是把 PR 合并进 `main`：
 
 - 推送到 `main` 或 `cursor/mobile-play-wave1-6414`
 - Actions 里手动跑 `pages`（`workflow_dispatch`）

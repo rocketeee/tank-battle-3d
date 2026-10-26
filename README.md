@@ -63,6 +63,6 @@ npm run android:bundle # bundleRelease，签名见 PLAY_STORE.md
 
 文案、数据安全表、分级说明、截图尺寸、隐私政策 URL 和本地 AAB 步骤在 [PLAY_STORE.md](PLAY_STORE.md)。
 
-隐私政策页面是 `docs/privacy.html`，联系邮箱 `rocketeee@gmail.com`。公开地址是 `https://rocketeee.github.io/tank-battle-3d/privacy.html`。`.github/workflows/pages.yml` 会在推到 `main` 或 `cursor/mobile-play-wave1-6414` 时用 GitHub Actions 发布 `docs/`，也可以在 Actions 里手动跑 `pages`。主菜单和清单里的链接都是这个地址。商店图在 `store/`。
+可玩网页是 `https://rocketeee.github.io/tank-battle-3d/`（桌面用键鼠，虚拟摇杆会藏起来）。隐私政策页面是 `docs/privacy.html`，联系邮箱 `rocketeee@gmail.com`，公开地址是 `https://rocketeee.github.io/tank-battle-3d/privacy.html`。`.github/workflows/pages.yml` 会在推到 `main` 或 `cursor/mobile-play-wave1-6414` 时构建 `dist/`，把隐私页复制进去，再用 GitHub Actions 发布。主菜单和清单里的隐私链接都是这个地址。商店图在 `store/`。
 
 当前「去除广告」「草莓涂装」「激励复活」「换一批」「插屏」仍是本地模拟：插屏最多每两次结算出现一次，启动和开火时不会出现，并且不会给伤害。真 AdMob、UMP、Play Billing 的接口在 `src/game/monetization.ts`，这一版不带那些 SDK。
